@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pi-hole Deployment Guide</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          max-width: 900px; margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.6; }
+  h1,h2,h3 { color: #1a1a2e; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+  code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  pre { background: #f4f4f4; padding: 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+  th { background: #f0f0f0; }
+  blockquote { border-left: 4px solid #ccc; margin: 0; padding-left: 16px; color: #555; }
+</style>
+</head>
+<body>
+<h1>Pi-hole Deployment Guide</h1>
+<p>Deploy both projects to your Raspberry Pi — <strong>pi_hole_web_survillance first</strong>, then <strong>pihole-mcp-server</strong>.</p>
+<p>Use the automated script (<code>3_deploy.sh</code>) for a one-command deploy, or follow the manual steps below.</p>
+<hr />
+<h2>Prerequisites</h2>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Raspberry Pi running Pi-hole</td>
+<td>See <code>1_analytics.md</code> for Pi setup from scratch</td>
+</tr>
+<tr>
+<td>Pi-hole Analytics dashboard deployed</td>
+<td>Part 1 below</td>
+</tr>
+<tr>
+<td>SSH key auth to the Pi</td>
+<td><code>ssh-copy-id pi@YOUR_PI_IP</code></td>
+</tr>
+<tr>
+<td>Gemini API key</td>
+<td><a href="https://aistudio.google.com/app/apikey">aistudio.google.com/app/apikey</a> — free</td>
+</tr>
+<tr>
+<td>Telegram bot token</td>
+<td><a href="https://t.me/BotFather">@BotFather</a> → <code>/newbot</code></td>
+</tr>
+<tr>
+<td>Your Telegram chat ID</td>
+<td><a href="https://t.me/userinfobot">@userinfobot</a></td>
+</tr>
+<tr>
+<td>Gmail App Password</td>
+<td>myaccount.google.com → Security → App passwords</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Automated Deploy</h2>
+<pre><code class="language-bash"># Full deploy (first time)
+bash 3_deploy.sh
+
+# Quick update (code changes only, no reinstall)
+bash 3_deploy.sh --update
+</code></pre>
+<p>The script handles everything: rsync, config copy, install, systemd service, verification.</p>
+<hr />
+<h2>Manual Steps</h2>
+<h3>Part 1 — pi_hole_web_survillance (Analytics Dashboard)</h3>
+<h4>Step 1 — Configure</h4>
+<pre><code class="language-bash">cp pi_hole_web_survillance/config/config.example.yaml \
+   pi_hole_web_survillance/config/config.yaml
+</code></pre>
+<p>Fill in <code>config/config.yaml</code>:</p>
+<pre><code class="language-yaml">pihole:
+  host: http://localhost        # Pi-hole runs on the same Pi
+  password: YOUR_PIHOLE_ADMIN_PASSWORD
+  api_token: YOUR_API_TOKEN     # Pi-hole v5 only — Admin → Settings → API
+
+email:
+  sender_email: you@gmail.com
+  sender_password: xxxx xxxx xxxx xxxx   # Gmail App Password (16 chars)
+  recipient_emails:
+    - you@email.com
+
+gemini:
+  api_key: YOUR_GEMINI_API_KEY
+  model: gemini-2.5-flash
+
+dashboard:
+  port: 8080
+  host: 0.0.0.0
+  password: YOUR_DASHBOARD_PASSWORD
+  url: http://YOUR_PI_IP:8080
+</code></pre>
+<h4>Step 2 — Deploy to Pi</h4>
+<pre><code class="language-bash">rsync -az --exclude='.git/' --exclude='venv/' --exclude='__pycache__/' \
+    pi_hole_web_survillance/ pi@YOUR_PI_IP:~/pihole-analytics/
+
+scp pi_hole_web_survillance/config/config.yaml \
+    pi@YOUR_PI_IP:~/pihole-analytics/config/config.yaml
+</code></pre>
+<h4>Step 3 — Install</h4>
+<pre><code class="language-bash">ssh pi@YOUR_PI_IP &quot;cd ~/pihole-analytics &amp;&amp; sudo bash install.sh&quot;
+</code></pre>
+<p>The installer:
+- Creates a Python venv and installs dependencies
+- Sets up all systemd services and timers
+- Downloads the UT1 domain category database (~50 MB)
+- Adds adult content blocklist to Pi-hole
+- Runs the first data fetch</p>
+<h4>Step 4 — Lock permissions</h4>
+<pre><code class="language-bash">ssh pi@YOUR_PI_IP &quot;
+  sudo chown -R pi:pi ~/pihole-analytics &amp;&amp;
+  chmod 600 ~/pihole-analytics/config/config.yaml &amp;&amp;
+  chmod 700 ~/pihole-analytics/data/ ~/pihole-analytics/logs/
+&quot;
+</code></pre>
+<h4>Step 5 — Fix PYTHONPATH in systemd service</h4>
+<p>The dashboard service needs <code>PYTHONPATH</code> set or it won't start:</p>
+<pre><code class="language-bash">ssh pi@YOUR_PI_IP &quot;
+  sudo sed -i '/^ExecStart=/i Environment=PYTHONPATH=/home/pi/pihole-analytics' \
+      /etc/systemd/system/pihole-analytics-dashboard.service &amp;&amp;
+  sudo systemctl daemon-reload &amp;&amp;
+  sudo systemctl restart pihole-analytics-dashboard
+&quot;
+</code></pre>
+<h4>Step 6 — Verify</h4>
+<pre><code class="language-bash">ssh pi@YOUR_PI_IP &quot;systemctl status pihole-analytics-dashboard&quot;
+ssh pi@YOUR_PI_IP &quot;curl -s http://localhost:8080/api/summary&quot;
+</code></pre>
+<p>Open dashboard: <strong>http://YOUR_PI_IP:8080</strong></p>
+<hr />
+<h3>Part 2 — pihole-mcp-server (Telegram Bot)</h3>
+<blockquote>
+<p>Deploy <strong>after</strong> Part 1 — the bot connects to the dashboard at <code>http://localhost:8080</code>.</p>
+</blockquote>
+<h4>Step 1 — Configure</h4>
+<pre><code class="language-bash">cp pihole-mcp-server/config/connectors/pihole.example.yaml \
+   pihole-mcp-server/config/connectors/pihole.yaml
+
+cp pihole-mcp-server/config/connectors/telegram.example.yaml \
+   pihole-mcp-server/config/connectors/telegram.yaml
+
+cp pihole-mcp-server/config/llm/gemini.example.yaml \
+   pihole-mcp-server/config/llm/gemini.yaml
+</code></pre>
+<p><strong><code>config/connectors/pihole.yaml</code></strong></p>
+<pre><code class="language-yaml">url: http://localhost:8080          # same Pi as dashboard
+password: YOUR_DASHBOARD_PASSWORD   # must match dashboard.password above
+</code></pre>
+<p><strong><code>config/connectors/telegram.yaml</code></strong></p>
+<pre><code class="language-yaml">bot_token: YOUR_BOT_TOKEN           # from @BotFather
+default_chat_id: &quot;YOUR_CHAT_ID&quot;     # from @userinfobot
+</code></pre>
+<p><strong><code>config/llm/gemini.yaml</code></strong></p>
+<pre><code class="language-yaml">api_key: YOUR_GEMINI_API_KEY
+model: gemini-2.5-flash
+</code></pre>
+<h4>Step 2 — Deploy to Pi</h4>
+<pre><code class="language-bash">rsync -az --exclude='.git/' --exclude='.venv/' --exclude='__pycache__/' \
+    pihole-mcp-server/ pi@YOUR_PI_IP:~/pihole-mcp-server/
+
+scp pihole-mcp-server/config/connectors/pihole.yaml \
+    pi@YOUR_PI_IP:~/pihole-mcp-server/config/connectors/pihole.yaml
+scp pihole-mcp-server/config/connectors/telegram.yaml \
+    pi@YOUR_PI_IP:~/pihole-mcp-server/config/connectors/telegram.yaml
+scp pihole-mcp-server/config/llm/gemini.yaml \
+    pi@YOUR_PI_IP:~/pihole-mcp-server/config/llm/gemini.yaml
+</code></pre>
+<h4>Step 3 — Install dependencies</h4>
+<pre><code class="language-bash">ssh pi@YOUR_PI_IP &quot;
+  cd ~/pihole-mcp-server &amp;&amp;
+  python3 -m venv .venv &amp;&amp;
+  .venv/bin/pip install -r requirements.txt
+&quot;
+</code></pre>
+<p>If blocked by PEP 668:</p>
+<pre><code class="language-bash">ssh pi@YOUR_PI_IP &quot;pip3 install --break-system-packages -r ~/pihole-mcp-server/requirements.txt&quot;
+</code></pre>
+<h4>Step 4 — Verify</h4>
+<pre><code class="language-bash">ssh pi@YOUR_PI_IP &quot;
+  cd ~/pihole-mcp-server &amp;&amp;
+  .venv/bin/python3 llm/gemini_agent.py --prompt 'Is my network healthy?'
+&quot;
+</code></pre>
+<p>Expected: a plain-English summary. <code>ConnectionRefusedError</code> means the dashboard isn't running.</p>
+<h4>Step 5 — Install as a systemd service</h4>
+<pre><code class="language-bash">ssh pi@YOUR_PI_IP &quot;sudo tee /etc/systemd/system/pihole-mcp-watch.service &gt; /dev/null&quot; &lt;&lt; 'EOF'
+[Unit]
+Description=Pi-hole Telegram Bot + Watch Agent
+After=network.target pihole-analytics-dashboard.service
+
+[Service]
+ExecStart=/home/pi/pihole-mcp-server/.venv/bin/python3 /home/pi/pihole-mcp-server/llm/gemini_agent.py --telegram --watch
+WorkingDirectory=/home/pi/pihole-mcp-server
+Restart=on-failure
+RestartSec=30
+User=pi
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+ssh pi@YOUR_PI_IP &quot;
+  sudo systemctl daemon-reload &amp;&amp;
+  sudo systemctl enable --now pihole-mcp-watch
+&quot;
+</code></pre>
+<h4>Step 6 — Test Telegram</h4>
+<p>Send <code>/help</code> to your bot. You should receive the command list. Then try <code>/status</code>.</p>
+<hr />
+<h2>Scheduled Timers (installed by install.sh)</h2>
+<table>
+<thead>
+<tr>
+<th>Timer</th>
+<th>Schedule</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pihole-analytics-fetch</code></td>
+<td>Every 15 min</td>
+<td>Pull DNS queries from Pi-hole into SQLite</td>
+</tr>
+<tr>
+<td><code>pihole-analytics-daily</code></td>
+<td>7:00 AM daily</td>
+<td>Send daily email report</td>
+</tr>
+<tr>
+<td><code>pihole-analytics-weekly</code></td>
+<td>7:10 AM Monday</td>
+<td>Send weekly email report</td>
+</tr>
+<tr>
+<td><code>pihole-analytics-monthly</code></td>
+<td>7:20 AM on 1st</td>
+<td>Send monthly email report</td>
+</tr>
+<tr>
+<td><code>pihole-analytics-download</code></td>
+<td>Sunday 3:00 AM</td>
+<td>Refresh UT1 domain category database</td>
+</tr>
+<tr>
+<td><code>pihole-analytics-sysupdate</code></td>
+<td>Sunday 4:00 AM</td>
+<td>System package updates</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Updating After Code Changes</h2>
+<pre><code class="language-bash"># Quick update (no reinstall)
+bash 3_deploy.sh --update
+
+# Manual quick update
+rsync -az scripts/ config/ pi@YOUR_PI_IP:~/pihole-analytics/
+ssh pi@YOUR_PI_IP &quot;sudo systemctl restart pihole-analytics-dashboard&quot;
+
+rsync -az --exclude='.git/' --exclude='.venv/' --exclude='__pycache__/' \
+    pihole-mcp-server/ pi@YOUR_PI_IP:~/pihole-mcp-server/
+ssh pi@YOUR_PI_IP &quot;sudo systemctl restart pihole-mcp-watch&quot;
+</code></pre>
+<hr />
+<h2>Useful SSH Commands</h2>
+<pre><code class="language-bash"># Dashboard logs
+ssh pi@YOUR_PI_IP &quot;journalctl -u pihole-analytics-dashboard -f&quot;
+
+# Telegram bot logs
+ssh pi@YOUR_PI_IP &quot;journalctl -u pihole-mcp-watch -f&quot;
+
+# Check all timers
+ssh pi@YOUR_PI_IP &quot;systemctl list-timers pihole-analytics*&quot;
+
+# Manual data fetch
+ssh pi@YOUR_PI_IP &quot;~/pihole-analytics/venv/bin/python3 ~/pihole-analytics/scripts/data/fetcher.py&quot;
+
+# Test the bot manually
+ssh pi@YOUR_PI_IP &quot;cd ~/pihole-mcp-server &amp;&amp; .venv/bin/python3 llm/gemini_agent.py --prompt 'Who is on my network?'&quot;
+</code></pre>
+<hr />
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dashboard not loading at <code>:8080</code></td>
+<td><code>sudo systemctl restart pihole-analytics-dashboard</code></td>
+</tr>
+<tr>
+<td>Dashboard crashes on startup</td>
+<td>Add <code>Environment=PYTHONPATH=/home/pi/pihole-analytics</code> to service — see Step 5 above</td>
+</tr>
+<tr>
+<td>No data in dashboard</td>
+<td>Run fetcher manually; check <code>logs/fetcher.log</code></td>
+</tr>
+<tr>
+<td>Email not arriving</td>
+<td>Verify Gmail App Password (not your Gmail login password)</td>
+</tr>
+<tr>
+<td>MCP <code>ConnectionRefusedError</code></td>
+<td>Dashboard not running — check Part 1</td>
+</tr>
+<tr>
+<td>MCP <code>401 Unauthorized</code></td>
+<td><code>password</code> in <code>pihole.yaml</code> must match <code>dashboard.password</code> in <code>config.yaml</code></td>
+</tr>
+<tr>
+<td>Telegram bot not responding</td>
+<td>Check <code>bot_token</code> in <code>telegram.yaml</code>; verify bot exists</td>
+</tr>
+<tr>
+<td>Gemini quota error</td>
+<td>Wait 1 min; increase <code>watch_interval_minutes</code> in <code>prompts.yaml</code></td>
+</tr>
+<tr>
+<td><code>Permission denied</code> on files</td>
+<td><code>sudo chown -R pi:pi ~/pihole-analytics ~/pihole-mcp-server</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Security Notes</h2>
+<pre><code class="language-bash"># Lock all config files containing credentials
+chmod 600 ~/pihole-analytics/config/config.yaml
+chmod 600 ~/pihole-mcp-server/config/connectors/*.yaml
+chmod 600 ~/pihole-mcp-server/config/llm/gemini.yaml
+
+# Port 8080 must NOT be exposed to the internet — local network only
+# Pi-hole ports 80/443 must NOT be port-forwarded
+</code></pre>
+<p>Revoke credentials:
+- <strong>Pi-hole password</strong> → Pi-hole admin → Settings → Change password
+- <strong>Dashboard password</strong> → update <code>dashboard.password</code> in both <code>config.yaml</code> files
+- <strong>Gmail App Password</strong> → myaccount.google.com → Security → App passwords → delete
+- <strong>Gemini API key</strong> → aistudio.google.com → API keys → revoke
+- <strong>Telegram bot token</strong> → @BotFather → <code>/revoke</code> → update <code>telegram.yaml</code></p>
+</body>
+</html>

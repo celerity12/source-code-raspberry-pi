@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pi-hole MCP Server</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          max-width: 900px; margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.6; }
+  h1,h2,h3 { color: #1a1a2e; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+  code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  pre { background: #f4f4f4; padding: 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+  th { background: #f0f0f0; }
+  blockquote { border-left: 4px solid #ccc; margin: 0; padding-left: 16px; color: #555; }
+</style>
+</head>
+<body>
+<h1>Pi-hole Telegram Bot (pihole-mcp-server)</h1>
+<p>Monitor and control your home network from <strong>Telegram</strong>. Ask questions, get security alerts, and block domains — all from your phone.</p>
+<blockquote>
+<p>Deploy <a href="../pi_hole_web_survillance">pi_hole_web_survillance</a> first — this bot connects to its dashboard.</p>
+</blockquote>
+<hr />
+<h2>Telegram Commands</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What you get</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/status</code></td>
+<td>Network overview — queries, blocked %, active devices</td>
+</tr>
+<tr>
+<td><code>/alerts</code></td>
+<td>Security alerts today (adult content, VPN, crypto)</td>
+</tr>
+<tr>
+<td><code>/health</code></td>
+<td>System health — disk, RAM, CPU, temperature</td>
+</tr>
+<tr>
+<td><code>/devices</code></td>
+<td>All active devices today with query counts</td>
+</tr>
+<tr>
+<td><code>/block domain.com</code></td>
+<td>Block a domain via Pi-hole</td>
+</tr>
+<tr>
+<td><code>/unblock domain.com</code></td>
+<td>Unblock a domain</td>
+</tr>
+<tr>
+<td><code>/report</code></td>
+<td>Trigger daily email report</td>
+</tr>
+<tr>
+<td><code>/help</code></td>
+<td>Show all commands</td>
+</tr>
+</tbody>
+</table>
+<p>You can also ask anything in plain English:</p>
+<blockquote>
+<p>"Who was online last night?"
+"What was the kids' tablet doing this week?"
+"Show me all gaming sites visited today."
+"Block YouTube for now."</p>
+</blockquote>
+<hr />
+<h2>How It Works</h2>
+<pre><code>Your Telegram message
+        ↓
+  gemini_agent.py  (polls Telegram every 3s)
+        ↓
+  Gemini AI  (decides which data to fetch)
+        ↓
+  mcp/server.py  (29 tools — Pi-hole data + Telegram)
+        ↓
+  Pi-hole Analytics dashboard  (:8080)
+        ↓
+  Reply sent back to your Telegram
+</code></pre>
+<hr />
+<h2>Setup</h2>
+<h3>Prerequisites</h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>How to get it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pi-hole Analytics dashboard running</td>
+<td>Deploy <code>1_analytics</code> project first</td>
+</tr>
+<tr>
+<td>Gemini API key</td>
+<td><a href="https://aistudio.google.com/app/apikey">aistudio.google.com/app/apikey</a> — free</td>
+</tr>
+<tr>
+<td>Telegram bot token</td>
+<td>Message <a href="https://t.me/BotFather">@BotFather</a> → <code>/newbot</code></td>
+</tr>
+<tr>
+<td>Your Telegram chat ID</td>
+<td>Message <a href="https://t.me/userinfobot">@userinfobot</a></td>
+</tr>
+</tbody>
+</table>
+<h3>1. Install dependencies</h3>
+<pre><code class="language-bash">cd pihole-mcp-server
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+</code></pre>
+<p>If pip is blocked by PEP 668:</p>
+<pre><code class="language-bash">pip3 install --break-system-packages -r requirements.txt
+</code></pre>
+<h3>2. Configure</h3>
+<pre><code class="language-bash">cp config/connectors/pihole.example.yaml    config/connectors/pihole.yaml
+cp config/connectors/telegram.example.yaml  config/connectors/telegram.yaml
+cp config/llm/gemini.example.yaml           config/llm/gemini.yaml
+</code></pre>
+<p><strong>config/connectors/pihole.yaml</strong></p>
+<pre><code class="language-yaml">url: http://localhost:8080      # use localhost if bot runs on same Pi as dashboard
+password: your_dashboard_password
+</code></pre>
+<p><strong>config/connectors/telegram.yaml</strong></p>
+<pre><code class="language-yaml">bot_token: 1234567890:ABCdef...   # from @BotFather
+default_chat_id: &quot;123456789&quot;      # from @userinfobot
+</code></pre>
+<p><strong>config/llm/gemini.yaml</strong></p>
+<pre><code class="language-yaml">api_key: AIzaSy...
+model: gemini-2.5-flash
+</code></pre>
+<h3>3. Verify</h3>
+<pre><code class="language-bash">.venv/bin/python3 llm/gemini_agent.py --prompt &quot;Is my network healthy?&quot;
+</code></pre>
+<p>Expected: a plain-English health summary. If <code>ConnectionRefusedError</code> — dashboard isn't running.</p>
+<hr />
+<h2>Deploy</h2>
+<h3>Copy files to Pi</h3>
+<pre><code class="language-bash">rsync -az --exclude='.git/' --exclude='.venv/' --exclude='__pycache__/' \
+    . pi@192.168.68.102:~/pihole-mcp-server/
+
+# Copy secret configs
+scp config/connectors/pihole.yaml    pi@192.168.68.102:~/pihole-mcp-server/config/connectors/
+scp config/connectors/telegram.yaml  pi@192.168.68.102:~/pihole-mcp-server/config/connectors/
+scp config/llm/gemini.yaml           pi@192.168.68.102:~/pihole-mcp-server/config/llm/
+</code></pre>
+<h3>Install on Pi</h3>
+<pre><code class="language-bash">ssh pi@192.168.68.102 &quot;
+  cd ~/pihole-mcp-server &amp;&amp;
+  python3 -m venv .venv &amp;&amp;
+  .venv/bin/pip install -r requirements.txt
+&quot;
+</code></pre>
+<h3>Install as a systemd service</h3>
+<pre><code class="language-bash">ssh pi@192.168.68.102 &quot;sudo tee /etc/systemd/system/pihole-mcp-watch.service &gt; /dev/null&quot; &lt;&lt; 'EOF'
+[Unit]
+Description=Pi-hole Telegram Bot + Watch Agent
+After=network.target pihole-analytics-dashboard.service
+
+[Service]
+ExecStart=/home/pi/pihole-mcp-server/.venv/bin/python3 /home/pi/pihole-mcp-server/llm/gemini_agent.py --telegram --watch
+WorkingDirectory=/home/pi/pihole-mcp-server
+Restart=on-failure
+RestartSec=30
+User=pi
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+ssh pi@192.168.68.102 &quot;
+  sudo systemctl daemon-reload &amp;&amp;
+  sudo systemctl enable --now pihole-mcp-watch
+&quot;
+</code></pre>
+<p>Check it's running:</p>
+<pre><code class="language-bash">ssh pi@192.168.68.102 &quot;systemctl status pihole-mcp-watch&quot;
+ssh pi@192.168.68.102 &quot;journalctl -u pihole-mcp-watch -f&quot;
+</code></pre>
+<p>Then send <code>/help</code> to your Telegram bot to confirm it's working.</p>
+<hr />
+<h2>Running Modes</h2>
+<h3>Telegram bot + watch mode (recommended — one command does everything)</h3>
+<pre><code class="language-bash">.venv/bin/python3 llm/gemini_agent.py --telegram --watch
+</code></pre>
+<h3>Telegram bot only (responds to commands, no automatic alerts)</h3>
+<pre><code class="language-bash">.venv/bin/python3 llm/gemini_agent.py --telegram
+</code></pre>
+<h3>Watch mode only (automatic alerts, no command listening)</h3>
+<pre><code class="language-bash">.venv/bin/python3 llm/gemini_agent.py --watch
+.venv/bin/python3 llm/gemini_agent.py --watch --interval 120   # every 2 hours
+</code></pre>
+<hr />
+<h2>Watch Mode Schedule</h2>
+<p>Automatic alerts are sent to Telegram without you asking — only when issues are found.</p>
+<ul>
+<li>Checks every <strong>6 hours</strong> by default (10 AM, 4 PM, 10 PM)</li>
+<li>Skips <strong>4 AM–10 AM</strong> quiet window automatically</li>
+<li>Sends alert only if adult content, VPN, crypto, or excessive usage detected</li>
+<li>Silent "all clear" — no message if nothing found</li>
+</ul>
+<p>Tune in <code>config/llm/prompts.yaml</code>:</p>
+<pre><code class="language-yaml">watch_interval_minutes: 360   # every 6 hours
+watch_skip_start_hour: 4      # quiet window start
+watch_skip_end_hour: 10       # quiet window end
+</code></pre>
+<hr />
+<h2>Config Files</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Secret</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>config/connectors/pihole.yaml</code></td>
+<td>Yes — gitignored</td>
+<td>Dashboard URL + password</td>
+</tr>
+<tr>
+<td><code>config/connectors/telegram.yaml</code></td>
+<td>Yes — gitignored</td>
+<td>Bot token + chat ID</td>
+</tr>
+<tr>
+<td><code>config/llm/gemini.yaml</code></td>
+<td>Yes — gitignored</td>
+<td>Gemini API key + model</td>
+</tr>
+<tr>
+<td><code>config/llm/prompts.yaml</code></td>
+<td>No</td>
+<td>Watch schedule + agent behaviour</td>
+</tr>
+<tr>
+<td><code>config/mcp/server.yaml</code></td>
+<td>No</td>
+<td>Server name + log level</td>
+</tr>
+</tbody>
+</table>
+<p>All <code>*.example.yaml</code> files are tracked in git — copy them to create the real files.</p>
+<hr />
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bot not responding</td>
+<td>Check <code>bot_token</code> in <code>telegram.yaml</code> is correct</td>
+</tr>
+<tr>
+<td><code>ConnectionRefusedError</code></td>
+<td>Dashboard not running — start <code>pihole-analytics-dashboard</code> first</td>
+</tr>
+<tr>
+<td><code>401 Unauthorized</code></td>
+<td>Wrong <code>password</code> in <code>pihole.yaml</code> — must match dashboard's <code>dashboard.password</code></td>
+</tr>
+<tr>
+<td>Gemini quota error</td>
+<td>Wait 1 min; increase <code>watch_interval_minutes</code> in <code>prompts.yaml</code></td>
+</tr>
+<tr>
+<td>Bot says "⏳ Checking..." then nothing</td>
+<td>Run <code>journalctl -u pihole-mcp-watch -f</code> for the error</td>
+</tr>
+<tr>
+<td><code>FileNotFoundError: config/connectors/pihole.yaml</code></td>
+<td>Config files not created — run the <code>cp</code> commands in Setup step 2</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Testing</h2>
+<pre><code class="language-bash">python3 -m pytest tests/test_all.py -v
+</code></pre>
+<p>All tests run offline — no live credentials required.</p>
+</body>
+</html>

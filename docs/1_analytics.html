@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pi-hole Analytics</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          max-width: 900px; margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.6; }
+  h1,h2,h3 { color: #1a1a2e; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+  code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  pre { background: #f4f4f4; padding: 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+  th { background: #f0f0f0; }
+  blockquote { border-left: 4px solid #ccc; margin: 0; padding-left: 16px; color: #555; }
+</style>
+</head>
+<body>
+<h1>Pi-hole Analytics</h1>
+<p>Self-hosted home network analytics for Pi-hole. Fetches DNS query data every 15 minutes, stores it in SQLite, and serves a real-time web dashboard plus scheduled HTML email reports. Everything stays on your device — no cloud, no third parties.</p>
+<hr />
+<h2>What It Does</h2>
+<ul>
+<li><strong>Real-time dashboard</strong> — traffic overview, per-device activity, category breakdown, hourly charts, blocked domains, health panel</li>
+<li><strong>Email reports</strong> — daily, weekly, and monthly HTML reports with charts, device cards, alerts, and system health</li>
+<li><strong>Device deep-dive</strong> — click any device to see hourly activity, all domains accessed, flagged categories</li>
+<li><strong>Smart categorization</strong> — classifies every domain into 20+ categories (streaming, social media, gaming, adult, educational, etc.)</li>
+<li><strong>Security alerts</strong> — flags adult content, VPN/proxy usage, crypto, excessive social media</li>
+<li><strong>System health</strong> — disk, RAM, CPU, temperature, Pi-hole blocking status, service states</li>
+<li><strong>Security hardening</strong> — one-command script to lock down the Pi (firewall, fail2ban, SSH keys)</li>
+</ul>
+<hr />
+<h2>Prerequisites — Raspberry Pi + Pi-hole Setup</h2>
+<p>If you already have a Pi with Pi-hole running, skip to <a href="#deploy">Deploy</a>.</p>
+<h3>What you need</h3>
+<ul>
+<li>Raspberry Pi 4 or 5 (4GB+ recommended)</li>
+<li>MicroSD card (32GB+) or USB SSD</li>
+<li>Network cable (recommended over Wi-Fi for a DNS server)</li>
+</ul>
+<h3>1. Install Raspberry Pi OS</h3>
+<ol>
+<li>Download <strong>Raspberry Pi Imager</strong>: https://www.raspberrypi.com/software/</li>
+<li>Choose OS → <strong>Raspberry Pi OS Lite (64-bit)</strong></li>
+<li>Click the ⚙️ gear icon and pre-configure:</li>
+<li>Hostname: <code>pihole</code></li>
+<li>Enable SSH: yes</li>
+<li>Username / password: <code>pi</code> / your choice</li>
+<li>Write to SD card, insert into Pi, power on</li>
+</ol>
+<h3>2. Connect and update</h3>
+<pre><code class="language-bash">ssh pi@pihole.local
+sudo apt update &amp;&amp; sudo apt upgrade -y
+sudo apt install -y curl git python3 python3-pip
+</code></pre>
+<h3>3. Assign a static IP</h3>
+<p><strong>Easiest — router DHCP reservation:</strong> In your router admin panel, bind the Pi's MAC address to a fixed IP (e.g. <code>192.168.68.102</code>). No changes needed on the Pi.</p>
+<p><strong>Alternative — static IP on the Pi:</strong></p>
+<pre><code class="language-bash">sudo nano /etc/dhcpcd.conf
+</code></pre>
+<pre><code>interface eth0
+static ip_address=192.168.68.102/24
+static routers=192.168.68.1
+static domain_name_servers=127.0.0.1 8.8.8.8
+</code></pre>
+<pre><code class="language-bash">sudo reboot
+</code></pre>
+<h3>4. Install Pi-hole</h3>
+<pre><code class="language-bash">curl -sSL https://install.pi-hole.net | bash
+</code></pre>
+<p>Walk through the installer:
+- Upstream DNS: <strong>Cloudflare</strong> (1.1.1.1)
+- Install web admin: <strong>yes</strong>
+- Log queries: <strong>yes</strong>
+- Privacy mode: <strong>0</strong> (show everything — required for analytics)</p>
+<p>Note your <strong>Pi-hole admin password</strong> shown at the end.</p>
+<h3>5. Point your router DNS to Pi-hole</h3>
+<p>In your router admin panel → DHCP / LAN Settings:
+- <strong>Primary DNS</strong> → Pi's IP (e.g. <code>192.168.68.102</code>)
+- <strong>Secondary DNS</strong> → <code>8.8.8.8</code> (fallback)</p>
+<p>Save and restart router. All devices now route DNS through Pi-hole automatically.</p>
+<h3>6. Disable DNS-over-HTTPS in browsers</h3>
+<p>Modern browsers bypass Pi-hole using encrypted DNS. Disable it:</p>
+<ul>
+<li><strong>Chrome:</strong> Settings → Privacy → Security → Use secure DNS → <strong>Off</strong></li>
+<li><strong>Firefox:</strong> Settings → Privacy → DNS over HTTPS → <strong>Off</strong></li>
+</ul>
+<p>The installer also blocks DoH providers at the Pi-hole level automatically.</p>
+<hr />
+<h2>Deploy</h2>
+<h3>1. Get your credentials</h3>
+<p><strong>Pi-hole password</strong> — the password you use to log into <code>http://PI_IP/admin</code></p>
+<p><strong>Pi-hole API token</strong> <em>(v5 only)</em> — Admin → Settings → API → Show API token</p>
+<p><strong>Gmail App Password</strong> <em>(for email reports)</em>
+1. Enable 2-Step Verification at myaccount.google.com
+2. Go to https://myaccount.google.com/apppasswords → create → name it <code>pihole-analytics</code>
+3. Copy the 16-character password</p>
+<h3>2. Configure</h3>
+<pre><code class="language-bash">cp config/config.example.yaml config/config.yaml
+nano config/config.yaml
+</code></pre>
+<p>Minimum required fields:</p>
+<pre><code class="language-yaml">pihole:
+  host: http://localhost
+  password: YOUR_PIHOLE_ADMIN_PASSWORD
+  api_token: YOUR_API_TOKEN           # v5 only
+
+email:
+  sender_email: you@gmail.com
+  sender_password: xxxx xxxx xxxx xxxx   # Gmail App Password
+  recipient_emails:
+    - you@gmail.com
+
+dashboard:
+  password: CHOOSE_A_DASHBOARD_PASSWORD
+  url: http://192.168.68.102:8080
+</code></pre>
+<h3>3. Deploy from your Linux box</h3>
+<pre><code class="language-bash">bash deploy.sh
+</code></pre>
+<p>The script will ask for Pi IP/user once, then handle everything via SSH. What it does:
+- Installs Python venv + sqlite3
+- Creates all systemd services and timers
+- Downloads UT1 domain category database (~50 MB)
+- Adds adult content blocklist to Pi-hole
+- Blocks DoH providers
+- Runs the first data fetch</p>
+<p>Or deploy manually:</p>
+<pre><code class="language-bash">rsync -az --exclude='.git/' --exclude='venv/' . pi@192.168.68.102:~/pihole-analytics/
+ssh pi@192.168.68.102 &quot;cd ~/pihole-analytics &amp;&amp; sudo bash install.sh&quot;
+</code></pre>
+<h3>4. Lock down permissions</h3>
+<pre><code class="language-bash">ssh pi@192.168.68.102 &quot;
+  sudo chown -R pi:pi ~/pihole-analytics &amp;&amp;
+  chmod 600 ~/pihole-analytics/config/config.yaml &amp;&amp;
+  chmod 700 ~/pihole-analytics/data/ ~/pihole-analytics/logs/
+&quot;
+</code></pre>
+<h3>5. Verify</h3>
+<pre><code class="language-bash"># Dashboard is running
+ssh pi@192.168.68.102 &quot;systemctl status pihole-analytics-dashboard&quot;
+
+# Timers are scheduled
+ssh pi@192.168.68.102 &quot;systemctl list-timers pihole-analytics*&quot;
+
+# Data was fetched
+ssh pi@192.168.68.102 &quot;sqlite3 ~/pihole-analytics/data/analytics.db 'SELECT COUNT(*) FROM queries;'&quot;
+</code></pre>
+<p>Open dashboard: <strong>http://192.168.68.102:8080</strong></p>
+<h3>6. Security hardening <em>(optional but recommended)</em></h3>
+<pre><code class="language-bash">bash harden.sh
+</code></pre>
+<p>What it does: SSH key auth, disables password login, fail2ban, ufw firewall, kernel hardening, log rotation.</p>
+<h3>Updating after code changes</h3>
+<pre><code class="language-bash"># Quick update
+rsync -az scripts/ config/ pi@192.168.68.102:~/pihole-analytics/
+ssh pi@192.168.68.102 &quot;sudo systemctl restart pihole-analytics-dashboard&quot;
+
+# Full reinstall (new deps or systemd units) — safe to re-run
+rsync -az --exclude='.git/' --exclude='venv/' . pi@192.168.68.102:~/pihole-analytics/
+ssh pi@192.168.68.102 &quot;cd ~/pihole-analytics &amp;&amp; sudo bash install.sh&quot;
+</code></pre>
+<hr />
+<h2>Dashboard</h2>
+<p>Access at <code>http://PI_IP:8080</code> — password protected.</p>
+<p><strong>Sections:</strong>
+- Summary cards — total requests, blocked %, unique domains, active devices
+- System health — Pi-hole status, disk/RAM/CPU/temp, all service states
+- Alert banners — flagged categories with top offending domains
+- Device cards — per-device activity; click "View Details" for deep-dive
+- Category chart, hourly chart, 30-day trend
+- Top blocked domains, new domains seen today</p>
+<hr />
+<h2>Email Reports</h2>
+<table>
+<thead>
+<tr>
+<th>Report</th>
+<th>Schedule</th>
+<th>Period</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Daily</td>
+<td>7:00 AM every day</td>
+<td>Last 24 hours</td>
+</tr>
+<tr>
+<td>Weekly</td>
+<td>7:10 AM every Monday</td>
+<td>Last 7 days</td>
+</tr>
+<tr>
+<td>Monthly</td>
+<td>7:20 AM on the 1st</td>
+<td>Last 30 days</td>
+</tr>
+</tbody>
+</table>
+<p>Send on-demand: click <strong>📧 Send Report</strong> in the dashboard, or:</p>
+<pre><code class="language-bash">ssh pi@192.168.68.102 '/home/pi/pihole-analytics/venv/bin/python3 \
+    /home/pi/pihole-analytics/scripts/reporter.py --period daily'
+</code></pre>
+<hr />
+<h2>Scheduled Timers</h2>
+<table>
+<thead>
+<tr>
+<th>Timer</th>
+<th>Schedule</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pihole-analytics-fetch</code></td>
+<td>Every 15 min</td>
+<td>Fetch DNS queries from Pi-hole</td>
+</tr>
+<tr>
+<td><code>pihole-analytics-daily</code></td>
+<td>7:00 AM daily</td>
+<td>Send daily email report</td>
+</tr>
+<tr>
+<td><code>pihole-analytics-weekly</code></td>
+<td>7:10 AM Monday</td>
+<td>Send weekly email report</td>
+</tr>
+<tr>
+<td><code>pihole-analytics-monthly</code></td>
+<td>7:20 AM on 1st</td>
+<td>Send monthly email report</td>
+</tr>
+<tr>
+<td><code>pihole-analytics-download</code></td>
+<td>Sunday 3:00 AM</td>
+<td>Refresh UT1 category database</td>
+</tr>
+<tr>
+<td><code>pihole-analytics-sysupdate</code></td>
+<td>Sunday 4:00 AM</td>
+<td>System package updates</td>
+</tr>
+<tr>
+<td><code>pihole-analytics-dashboard</code></td>
+<td>Always on</td>
+<td>Web dashboard</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-bash">systemctl list-timers pihole-analytics*
+journalctl -u pihole-analytics-dashboard -f
+</code></pre>
+<hr />
+<h2>Device Identification</h2>
+<p>Pi-hole sees devices by IP. Add friendly names in <code>config/config.yaml</code>:</p>
+<pre><code class="language-bash"># Find your device hostnames
+ssh pi@192.168.68.102 'sqlite3 /home/pi/pihole-analytics/data/analytics.db \
+  &quot;SELECT DISTINCT client_name, client_ip FROM queries ORDER BY client_name;&quot;'
+</code></pre>
+<pre><code class="language-yaml"># config/config.yaml
+client_hostnames:
+  &quot;johns-iphone&quot;: &quot;John's iPhone&quot;
+  &quot;sarahs-ipad&quot;: &quot;Sarah's iPad&quot;
+
+client_macs:
+  &quot;AA:BB:CC:DD:EE:FF&quot;: &quot;John's iPhone&quot;   # most reliable
+</code></pre>
+<hr />
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dashboard shows 0 queries</td>
+<td>Run fetcher manually; check <code>logs/fetcher.log</code></td>
+</tr>
+<tr>
+<td>Email not arriving</td>
+<td>Wrong Gmail App Password or 2FA not enabled</td>
+</tr>
+<tr>
+<td>Block button ❌ Failed</td>
+<td>Add <code>password:</code> to config.yaml (Pi-hole v6)</td>
+</tr>
+<tr>
+<td>Browser bypassing Pi-hole</td>
+<td>Disable DoH in browser (Chrome/Firefox)</td>
+</tr>
+<tr>
+<td>Device showing as IP</td>
+<td>Add hostname to <code>client_hostnames</code> in config</td>
+</tr>
+<tr>
+<td><code>Permission denied</code> on logs</td>
+<td><code>sudo chown -R pi:pi ~/pihole-analytics/</code></td>
+</tr>
+<tr>
+<td>Dashboard 502</td>
+<td><code>journalctl -u pihole-analytics-dashboard -n 50</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>REST API Reference</h2>
+<p>All endpoints served at <code>http://PI_IP:8080</code>. 🔐 = requires session cookie. 🔓 = public.</p>
+<h3>Authentication</h3>
+<pre><code>POST /login
+Content-Type: application/x-www-form-urlencoded
+Body: password=YOUR_DASHBOARD_PASSWORD
+</code></pre>
+<p>Sets a session cookie. The MCP connector handles this automatically.</p>
+<h3>Overview</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Endpoint</th>
+<th>Auth</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/stats</code></td>
+<td>🔐</td>
+<td>All-in-one snapshot — summary, categories, top domains, 7d trend</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/summary</code></td>
+<td>🔓</td>
+<td>Network totals — total/blocked queries, unique domains, active devices</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/health</code></td>
+<td>🔐</td>
+<td>System health — disk, RAM, CPU, temp, Pi-hole status</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/alerts</code></td>
+<td>🔓</td>
+<td>Security alerts — adult, VPN, crypto, excessive usage</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/trend</code></td>
+<td>🔓</td>
+<td>Daily query totals over N days</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/compare</code></td>
+<td>🔓</td>
+<td>Today vs yesterday</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/hourly</code></td>
+<td>🔓</td>
+<td>Query counts by hour</td>
+</tr>
+</tbody>
+</table>
+<h3>Devices</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Endpoint</th>
+<th>Auth</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/devices</code></td>
+<td>🔓</td>
+<td>All active devices with stats</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/device_registry</code></td>
+<td>🔐</td>
+<td>All known devices from MAC registry</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/device_detail?ip=</code></td>
+<td>🔐</td>
+<td>Deep summary + categories for one device</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/device_domains?ip=</code></td>
+<td>🔐</td>
+<td>All domains accessed by one device</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/device_hourly?ip=</code></td>
+<td>🔐</td>
+<td>Hourly counts for one device</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/date_range</code></td>
+<td>🔐</td>
+<td>Per-device summary over date range</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/all_clients_hourly</code></td>
+<td>🔐</td>
+<td>Hourly counts for every device</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/excessive_usage</code></td>
+<td>🔐</td>
+<td>Devices exceeding usage thresholds</td>
+</tr>
+</tbody>
+</table>
+<h3>Categories</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Endpoint</th>
+<th>Auth</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/categories</code></td>
+<td>🔓</td>
+<td>Category breakdown for a date</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/category_detail?category=</code></td>
+<td>🔓</td>
+<td>Top domains for a category</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/top_by_category?category=</code></td>
+<td>🔐</td>
+<td>Top domains for a category (with IP filter)</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/client_category_usage</code></td>
+<td>🔐</td>
+<td>Category breakdown per device</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/uncategorized_domains</code></td>
+<td>🔐</td>
+<td>Domains not matched to any category</td>
+</tr>
+</tbody>
+</table>
+<h3>Blocking &amp; Search</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Endpoint</th>
+<th>Auth</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/blocked_top</code></td>
+<td>🔐</td>
+<td>Top domains blocked by Pi-hole</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/blocked_summary</code></td>
+<td>🔐</td>
+<td>Blocked vs allowed counts</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/manually_blocked</code></td>
+<td>🔐</td>
+<td>Domains manually blocked via dashboard</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/block_domain</code></td>
+<td>🔐</td>
+<td>Block a domain</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/unblock_domain</code></td>
+<td>🔐</td>
+<td>Unblock a domain</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/search?q=</code></td>
+<td>🔐</td>
+<td>Search domains by keyword</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/query_log</code></td>
+<td>🔐</td>
+<td>Raw DNS query log with filters</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/new_domains</code></td>
+<td>🔓</td>
+<td>Domains seen for the first time today</td>
+</tr>
+</tbody>
+</table>
+<h3>Reports &amp; AI</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Endpoint</th>
+<th>Auth</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/send_report</code></td>
+<td>🔓</td>
+<td>Trigger email report (<code>daily</code>/<code>weekly</code>/<code>monthly</code>)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/ai_summary</code></td>
+<td>🔐</td>
+<td>Generate AI summary via Gemini (on-demand)</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/ai_summary_stored</code></td>
+<td>🔐</td>
+<td>Return last stored AI summary without calling Gemini</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/ai_eta</code></td>
+<td>🔐</td>
+<td>Estimated time for AI summary generation</td>
+</tr>
+</tbody>
+</table>
+<h3>Common query parameters</h3>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>date</code></td>
+<td><code>YYYY-MM-DD</code> (default: today)</td>
+</tr>
+<tr>
+<td><code>end_date</code></td>
+<td>End of date range</td>
+</tr>
+<tr>
+<td><code>start_ts</code> / <code>end_ts</code></td>
+<td>Unix timestamps (alternative to date)</td>
+</tr>
+<tr>
+<td><code>limit</code></td>
+<td>Max results returned</td>
+</tr>
+<tr>
+<td><code>ip</code></td>
+<td>Filter by device IP</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Security Notes</h2>
+<pre><code class="language-bash"># Lock config (contains credentials)
+chmod 600 ~/pihole-analytics/config/config.yaml
+
+# Port 8080 must NOT be exposed to the internet — local network only
+# Pi-hole port 80 must NOT be port-forwarded
+
+# Revoke credentials if compromised:
+# Pi-hole password → Pi-hole admin → Settings → Change password
+# Gmail App Password → myaccount.google.com → Security → App passwords → delete
+</code></pre>
+</body>
+</html>
