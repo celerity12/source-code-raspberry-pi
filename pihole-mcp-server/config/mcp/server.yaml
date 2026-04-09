@@ -1,0 +1,21 @@
+# ── MCP Server ────────────────────────────────────────────────────────────────
+# Read by:  mcp/server.py  via  config/loader.py → load_mcp()
+# Secret:   NO — safe to commit.  No credentials here.
+#
+# server_name
+#   The name shown to MCP clients (Claude Desktop, other MCP hosts).
+#   Appears in the Claude Desktop tool list and MCP handshake.
+#   Use lowercase-with-dashes; spaces are allowed but discouraged.
+
+server_name: pihole-analytics
+
+# log_level
+#   Controls how much the MCP server logs to stderr.
+#   Logs go to stderr so they don't pollute the stdio MCP transport.
+#   Options (most → least verbose):
+#     DEBUG    — every tool call, every result (noisy — use for development)
+#     INFO     — tool calls and startup messages (recommended for production)
+#     WARNING  — only unexpected conditions
+#     ERROR    — only failures
+
+log_level: INFO

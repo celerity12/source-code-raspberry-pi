@@ -1,0 +1,232 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MCP Tools Key Map
+# Reference for all 29 tools exposed by mcp/server.py
+# Connector column shows which connector handles the call.
+# ─────────────────────────────────────────────────────────────────────────────
+
+tools:
+
+  # ── Pi-hole: Overview ───────────────────────────────────────────────────────
+  - name: pihole_stats
+    connector: pihole
+    endpoint: GET /api/stats
+    params: [date?, end_date?]
+    returns: summary + categories + blocked counts + top domains + 7d trend
+    best_for: First call for any network question — all key metrics in one shot
+
+  - name: pihole_summary
+    connector: pihole
+    endpoint: GET /api/summary
+    params: [date?, end_date?]
+    returns: total_queries, blocked_queries, unique_domains, active_clients
+    best_for: Quick totals only — lighter than pihole_stats
+
+  - name: pihole_health
+    connector: pihole
+    endpoint: GET /api/health
+    params: []
+    returns: disk_percent, ram_percent, cpu_percent, temperature, pihole_blocking, service states
+    best_for: System health check, monitoring, alerts
+
+  - name: pihole_alerts
+    connector: pihole
+    endpoint: GET /api/alerts
+    params: [date?]
+    returns: list of alerts — adult content, VPN, crypto, excessive usage
+    best_for: Security overview, watch mode
+
+  - name: pihole_excessive_usage
+    connector: pihole
+    endpoint: GET /api/excessive_usage
+    params: [date?, threshold_minutes?=60]
+    returns: devices exceeding thresholds for social_media / streaming / gaming
+    best_for: Parental control checks, usage policy enforcement
+
+  # ── Pi-hole: Devices ────────────────────────────────────────────────────────
+  - name: pihole_devices
+    connector: pihole
+    endpoint: GET /api/devices
+    params: [date?]
+    returns: list of active devices with total/blocked queries, unique domains
+    best_for: Who is on the network today
+
+  - name: pihole_device_registry
+    connector: pihole
+    endpoint: GET /api/device_registry
+    params: []
+    returns: all known devices — mac, ip, hostname, device_type, custom_name, last_seen
+    best_for: Inventory of all ever-seen devices
+
+  - name: pihole_device_detail
+    connector: pihole
+    endpoint: GET /api/device_detail
+    params: [ip*, date?]
+    returns: summary + category breakdown + peak hour for one device
+    best_for: Deep-dive on a specific device
+
+  - name: pihole_device_domains
+    connector: pihole
+    endpoint: GET /api/device_domains
+    params: [ip*, date?, limit?=50]
+    returns: all domains accessed by device with counts and blocked ratio
+    best_for: Full browsing history for one device
+
+  - name: pihole_client_category_usage
+    connector: pihole
+    endpoint: GET /api/client_category_usage
+    params: [ip?, date?]
+    returns: category → {queries, domains} for one device or all devices
+    best_for: What categories a device is using most
+
+  - name: pihole_date_range
+    connector: pihole
+    endpoint: GET /api/date_range
+    params: [start_date*, end_date*]
+    returns: per-device summary over a date range
+    best_for: Weekly or monthly device activity reports
+
+  - name: pihole_all_clients_hourly
+    connector: pihole
+    endpoint: GET /api/all_clients_hourly
+    params: [date?]
+    returns: hourly query counts for every client for a given day
+    best_for: Visualising network usage patterns across all devices over 24 hours
+
+  # ── Pi-hole: Categories ─────────────────────────────────────────────────────
+  - name: pihole_categories
+    connector: pihole
+    endpoint: GET /api/categories
+    params: [date?]
+    returns: list of categories with query counts and unique domain counts
+    best_for: Traffic breakdown by type (streaming, gaming, social, etc.)
+
+  - name: pihole_top_by_category
+    connector: pihole
+    endpoint: GET /api/top_by_category
+    params: [category*, ip?, date?, limit?=10]
+    returns: top domains for a category, optionally filtered by device
+    best_for: "What Netflix/YouTube/TikTok URLs is device X visiting?"
+
+  - name: pihole_uncategorized_domains
+    connector: pihole
+    endpoint: GET /api/uncategorized_domains
+    params: [date?, limit?=20]
+    returns: domains categorized as 'other' — candidates for new rules
+    best_for: Improving categorization rules
+
+  # ── Pi-hole: Search & Query Log ─────────────────────────────────────────────
+  - name: pihole_search
+    connector: pihole
+    endpoint: GET /api/search
+    params: [q*, date?, limit?=50]
+    returns: matching domains with device, category, query count, blocked count
+    best_for: "Did anyone visit anything related to X today?"
+
+  - name: pihole_query_log
+    connector: pihole
+    endpoint: GET /api/query_log
+    params: [date?, ip?, category?, domain?, blocked?=false, limit?=100]
+    returns: raw DNS queries — timestamp, domain, client, category, status
+    best_for: Raw audit log with fine-grained filtering
+
+  - name: pihole_new_domains
+    connector: pihole
+    endpoint: GET /api/new_domains
+    params: [date?]
+    returns: domains seen for the first time today
+    best_for: Spotting new services or unknown devices phoning home
+
+  # ── Pi-hole: Blocking ───────────────────────────────────────────────────────
+  - name: pihole_blocked_top
+    connector: pihole
+    endpoint: GET /api/blocked_top
+    params: [date?]
+    returns: top domains blocked by Pi-hole with counts
+    best_for: What is Pi-hole stopping most
+
+  - name: pihole_blocked_summary
+    connector: pihole
+    endpoint: GET /api/blocked_summary
+    params: [date?, end_date?]
+    returns: total / blocked / allowed counts with per-status breakdown
+    best_for: Blocking effectiveness metrics
+
+  - name: pihole_manually_blocked
+    connector: pihole
+    endpoint: GET /api/manually_blocked
+    params: []
+    returns: domains manually blocked via dashboard with category and timestamp
+    best_for: Audit of manually managed blocklist
+
+  - name: pihole_block_domain
+    connector: pihole
+    endpoint: POST /api/block_domain
+    params: [domain*]
+    returns: success/error result
+    best_for: Block a domain on command
+    note: Write action — confirm with user before executing
+
+  - name: pihole_unblock_domain
+    connector: pihole
+    endpoint: POST /api/unblock_domain
+    params: [domain*]
+    returns: success/error result
+    best_for: Unblock a domain on command
+    note: Write action — confirm with user before executing
+
+  - name: pihole_send_report
+    connector: pihole
+    endpoint: POST /api/send_report
+    params: [period?=daily]  # daily | weekly | monthly
+    returns: success/error result
+    best_for: Trigger an HTML email report on demand
+
+  # ── Telegram ────────────────────────────────────────────────────────────────
+  - name: telegram_send_message
+    connector: telegram
+    endpoint: POST /sendMessage (Bot API)
+    params: [text*, chat_id?]
+    returns: message delivery result
+    best_for: Send any free-form text to Telegram
+
+  - name: telegram_send_alert
+    connector: telegram
+    endpoint: POST /sendMessage (Bot API)
+    params: [title*, body*, level?=warning, chat_id?]  # level: info|warning|critical
+    returns: message delivery result
+    best_for: Formatted alert with emoji severity prefix
+
+  - name: telegram_send_network_summary
+    connector: telegram
+    endpoint: pihole_stats → POST /sendMessage
+    params: [date?, chat_id?]
+    returns: message delivery result
+    best_for: One call to fetch Pi-hole stats and send a formatted summary to Telegram
+
+  - name: telegram_send_security_alerts
+    connector: telegram
+    endpoint: pihole_alerts → POST /sendMessage
+    params: [date?, chat_id?]
+    returns: message delivery result
+    best_for: One call to fetch and forward all security alerts to Telegram
+
+  - name: telegram_send_health
+    connector: telegram
+    endpoint: pihole_health → POST /sendMessage
+    params: [chat_id?]
+    returns: message delivery result
+    best_for: One call to fetch system health and send status to Telegram
+
+  - name: telegram_get_updates
+    connector: telegram
+    endpoint: GET /getUpdates (Bot API)
+    params: [limit?=10]
+    returns: recent messages sent to the bot
+    best_for: Read incoming commands or replies from users
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Param legend:
+#   *  = required
+#   ?  = optional
+#   ?= = optional with default value
+# ─────────────────────────────────────────────────────────────────────────────

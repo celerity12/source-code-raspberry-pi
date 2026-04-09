@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         line-height: 1.6; color: #1f2328; background: #f6f8fa;
+         padding: 24px; margin: 0; }
+  .content { max-width: 860px; margin: 0 auto; background: #fff;
+              border: 1px solid #d0d7de; border-radius: 12px; padding: 32px 40px; }
+  h1 { font-size: 28px; border-bottom: 2px solid #d0d7de; padding-bottom: 12px; margin-top: 0; }
+  h2 { font-size: 20px; border-bottom: 1px solid #d0d7de; padding-bottom: 6px; margin-top: 32px; }
+  h3 { font-size: 16px; margin-top: 24px; }
+  code { background: #f0f3f6; border: 1px solid #d0d7de; border-radius: 4px;
+          padding: 2px 5px; font-size: 13px; }
+  pre  { background: #0d1117; color: #e6edf3; border-radius: 8px; padding: 16px 20px;
+          overflow-x: auto; font-size: 13px; }
+  pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+  th, td { border: 1px solid #d0d7de; padding: 8px 12px; text-align: left; font-size: 14px; }
+  th { background: #f6f8fa; font-weight: 600; }
+  blockquote { border-left: 4px solid #0969da; margin: 0; padding: 8px 16px;
+                background: #f0f9ff; border-radius: 0 6px 6px 0; color: #0550ae; }
+  a { color: #0969da; }
+  hr { border: none; border-top: 1px solid #d0d7de; margin: 24px 0; }
+</style>
+</head>
+<body>
+<div class="content">
+<h1>Pi-hole Analytics — REST API Reference</h1>
+<p>All endpoints are served by the Flask dashboard at <code>http://YOUR_PI_IP:8080</code>.</p>
+<p>Most endpoints require an active session (browser login or the <code>password</code> cookie).<br />
+Endpoints marked <strong>🔓 Public</strong> do not require auth — they are safe to call from the MCP server.<br />
+Endpoints marked <strong>🔐 Auth</strong> require a valid session cookie.</p>
+<hr />
+<h2>Authentication</h2>
+<pre><code>POST /login
+Content-Type: application/x-www-form-urlencoded
+Body: password=YOUR_DASHBOARD_PASSWORD
+</code></pre>
+<p>The server sets a session cookie on success. All subsequent requests must include it.<br />
+The MCP connector (<code>connectors/pihole_client.py</code>) handles this automatically via <code>requests.Session</code>.</p>
+<hr />
+<h2>Common query parameters</h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>date</code></td>
+<td><code>YYYY-MM-DD</code></td>
+<td>Target date (default: today)</td>
+</tr>
+<tr>
+<td><code>end_date</code></td>
+<td><code>YYYY-MM-DD</code></td>
+<td>End of date range (inclusive)</td>
+</tr>
+<tr>
+<td><code>start_ts</code></td>
+<td>Unix timestamp</td>
+<td>Range start (alternative to date)</td>
+</tr>
+<tr>
+<td><code>end_ts</code></td>
+<td>Unix timestamp</td>
+<td>Range end (alternative to date)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Overview</h2>
+<h3><code>GET /api/stats</code> 🔐</h3>
+<p>All-in-one network snapshot — single call for LLM/MCP consumption.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>end_date</code></p>
+<p><strong>Returns:</strong></p>
+<pre><code class="language-json">{
+  &quot;date&quot;: &quot;2025-01-01&quot;,
+  &quot;summary&quot;: { &quot;total_queries&quot;: 16000, &quot;blocked_queries&quot;: 800, &quot;active_clients&quot;: 8, &quot;unique_domains&quot;: 2100 },
+  &quot;categories&quot;: [{ &quot;category&quot;: &quot;streaming&quot;, &quot;queries&quot;: 3000, &quot;unique_domains&quot;: 45 }],
+  &quot;blocked&quot;: { &quot;blocked&quot;: 800, &quot;allowed&quot;: 15200 },
+  &quot;top_domains&quot;: [{ &quot;domain&quot;: &quot;netflix.com&quot;, &quot;queries&quot;: 2500 }],
+  &quot;trend_7d&quot;: [{ &quot;date&quot;: &quot;2024-12-26&quot;, &quot;total&quot;: 14000, &quot;blocked&quot;: 700 }]
+}
+</code></pre>
+<hr />
+<h3><code>GET /api/summary</code> 🔓</h3>
+<p>Network totals for a date or date range.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>end_date</code>, <code>start_ts</code>, <code>end_ts</code></p>
+<p><strong>Returns:</strong> <code>{ total_queries, blocked_queries, unique_domains, active_clients }</code></p>
+<hr />
+<h3><code>GET /api/compare</code> 🔓</h3>
+<p>Compare today's stats vs yesterday.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>start_ts</code>, <code>end_ts</code></p>
+<p><strong>Returns:</strong> <code>{ today: {...}, yesterday: {...}, delta: {...} }</code></p>
+<hr />
+<h3><code>GET /api/trend</code> 🔓</h3>
+<p>Daily query totals over N days.</p>
+<p><strong>Query params:</strong> <code>days</code> (1–365, default 7), <code>client</code> (IP, optional)</p>
+<p><strong>Returns:</strong> <code>[{ date, total, blocked }]</code></p>
+<hr />
+<h3><code>GET /api/health</code> 🔐</h3>
+<p>System health — disk, RAM, CPU, temperature, Pi-hole service status.</p>
+<p><strong>Returns:</strong></p>
+<pre><code class="language-json">{
+  &quot;disk_percent&quot;: 42,
+  &quot;ram_percent&quot;: 38,
+  &quot;cpu_percent&quot;: 12,
+  &quot;temperature&quot;: 51.2,
+  &quot;pihole_blocking&quot;: true
+}
+</code></pre>
+<hr />
+<h2>Devices</h2>
+<h3><code>GET /api/devices</code> 🔓</h3>
+<p>Active devices enriched with MAC, hostname, and device type. Excludes devices listed in <code>excluded_devices</code> config.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>end_date</code></p>
+<p><strong>Returns:</strong> <code>[{ client_ip, client_name, mac, hostname, device_type, custom_name, total_queries, blocked_queries, unique_domains }]</code></p>
+<hr />
+<h3><code>GET /api/device_registry</code> 🔐</h3>
+<p>All known devices from the MAC registry — survives IP changes.</p>
+<p><strong>Returns:</strong> <code>[{ mac, last_ip, hostname, device_type, custom_name, last_seen }]</code></p>
+<hr />
+<h3><code>GET /api/device_detail</code> 🔐</h3>
+<p>Deep summary + category breakdown for one device.</p>
+<p><strong>Query params:</strong> <code>ip</code>* (required), <code>date</code></p>
+<p><strong>Returns:</strong> <code>{ summary: {...}, categories: [{category, queries, unique_domains}] }</code></p>
+<hr />
+<h3><code>GET /api/device_hourly</code> 🔐</h3>
+<p>Hourly query counts for one device.</p>
+<p><strong>Query params:</strong> <code>ip</code>* (required), <code>date</code></p>
+<p><strong>Returns:</strong> <code>[{ hour: 0..23, queries, blocked }]</code></p>
+<hr />
+<h3><code>GET /api/device_hourly_categories</code> 🔐</h3>
+<p>Hourly query counts broken down by category for one device.</p>
+<p><strong>Query params:</strong> <code>ip</code>* (required), <code>date</code></p>
+<p><strong>Returns:</strong> <code>[{ hour, category, queries }]</code></p>
+<hr />
+<h3><code>GET /api/device_domains</code> 🔐</h3>
+<p>All domains accessed by one device.</p>
+<p><strong>Query params:</strong> <code>ip</code>* (required), <code>date</code>, <code>limit</code> (1–500, default 200)</p>
+<p><strong>Returns:</strong> <code>[{ domain, category, queries, blocked }]</code></p>
+<hr />
+<h3><code>GET /api/device_flagged_category</code> 🔐</h3>
+<p>Domains in a flagged category accessed by one device — used for alert drill-down.</p>
+<p><strong>Query params:</strong> <code>ip</code><em> (required), <code>category</code></em> (required), <code>date</code></p>
+<p><strong>Returns:</strong> <code>[{ domain, queries, blocked }]</code></p>
+<hr />
+<h3><code>GET /api/date_range</code> 🔐</h3>
+<p>Per-device summary over an arbitrary date range.</p>
+<p><strong>Query params:</strong> <code>start_date</code><em> (required), <code>end_date</code></em> (required)</p>
+<p><strong>Returns:</strong> <code>[{ client_ip, client_name, total_queries, blocked_queries, unique_domains }]</code></p>
+<hr />
+<h3><code>GET /api/all_clients_hourly</code> 🔐</h3>
+<p>Hourly query counts for every active client — useful for heatmap views.</p>
+<p><strong>Query params:</strong> <code>date</code></p>
+<p><strong>Returns:</strong> <code>{ "192.168.1.10": [0, 0, 12, ...], ... }</code> (24 values per client, one per hour)</p>
+<hr />
+<h3><code>GET /api/clients</code> 🔓</h3>
+<p>Client comparison — today vs yesterday per device.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>start_ts</code>, <code>end_ts</code></p>
+<p><strong>Returns:</strong> <code>[{ client, today_queries, yesterday_queries, delta }]</code></p>
+<hr />
+<h2>Categories</h2>
+<h3><code>GET /api/categories</code> 🔓</h3>
+<p>Category breakdown for a date.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>end_date</code>, <code>start_ts</code>, <code>end_ts</code>, <code>client</code> (IP)</p>
+<p><strong>Returns:</strong> <code>[{ category, queries, unique_domains }]</code></p>
+<hr />
+<h3><code>GET /api/category_detail</code> 🔓</h3>
+<p>Top domains for a specific category — used by the dashboard drill-down modal.</p>
+<p><strong>Query params:</strong> <code>category</code>* (required), <code>date</code>, <code>end_date</code>, <code>client</code> (IP), <code>limit</code> (1–100, default 20)</p>
+<p><strong>Returns:</strong> <code>[{ domain, queries, blocked }]</code></p>
+<hr />
+<h3><code>GET /api/top_by_category</code> 🔐</h3>
+<p>Top domains for a category, optionally filtered by device IP.</p>
+<p><strong>Query params:</strong> <code>category</code>* (required), <code>date</code>, <code>end_date</code>, <code>ip</code>, <code>limit</code> (1–100, default 10)</p>
+<p><strong>Returns:</strong> <code>[{ domain, queries, blocked }]</code></p>
+<hr />
+<h3><code>GET /api/categorization_stats</code> 🔐</h3>
+<p>How many domains were categorized vs uncategorized.</p>
+<p><strong>Query params:</strong> <code>date</code></p>
+<p><strong>Returns:</strong> <code>{ categorized: 900, uncategorized: 100, total: 1000, pct_categorized: 90.0 }</code></p>
+<hr />
+<h3><code>GET /api/uncategorized_domains</code> 🔐</h3>
+<p>Domains that could not be matched to any category (category = <code>other</code>).</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>limit</code> (1–200, default 20)</p>
+<p><strong>Returns:</strong> <code>[{ domain, queries }]</code></p>
+<hr />
+<h3><code>GET /api/client_category_usage</code> 🔐</h3>
+<p>Category breakdown for one client or all clients.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>ip</code> (optional — omit for all clients)</p>
+<p><strong>Returns:</strong> <code>{ "192.168.1.10": { "streaming": { queries, domains }, ... }, ... }</code></p>
+<hr />
+<h2>Security &amp; Alerts</h2>
+<h3><code>GET /api/alerts</code> 🔓</h3>
+<p>Security alerts for a date — adult content, VPN/proxy, crypto, excessive usage.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>start_ts</code>, <code>end_ts</code></p>
+<p><strong>Returns:</strong></p>
+<pre><code class="language-json">{
+  &quot;critical&quot;: [{
+    &quot;category&quot;: &quot;adult&quot;,
+    &quot;level&quot;: &quot;critical&quot;,
+    &quot;icon&quot;: &quot;🔞&quot;,
+    &quot;title&quot;: &quot;Adult Content&quot;,
+    &quot;short&quot;: &quot;42 requests detected&quot;,
+    &quot;queries&quot;: 42,
+    &quot;devices&quot;: &quot;John's iPhone&quot;,
+    &quot;top_domains&quot;: [&quot;example.com (42)&quot;]
+  }],
+  &quot;warnings&quot;: [{ &quot;category&quot;: &quot;streaming&quot;, &quot;level&quot;: &quot;warning&quot;, ... }]
+}
+</code></pre>
+<hr />
+<h3><code>GET /api/excessive_usage</code> 🔐</h3>
+<p>Clients exceeding usage thresholds for social media, streaming, or gaming.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>threshold_minutes</code> (default 60)</p>
+<p><strong>Returns:</strong> <code>[{ client_ip, client_name, category, queries, domains }]</code></p>
+<hr />
+<h2>Blocking</h2>
+<h3><code>GET /api/blocked_top</code> 🔐</h3>
+<p>Top domains blocked by Pi-hole for a date.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>end_date</code>, <code>start_ts</code>, <code>end_ts</code></p>
+<p><strong>Returns:</strong> <code>[{ domain, count }]</code></p>
+<hr />
+<h3><code>GET /api/blocked_summary</code> 🔐</h3>
+<p>Blocked vs allowed query counts.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>end_date</code></p>
+<p><strong>Returns:</strong> <code>{ blocked, allowed, total, pct_blocked }</code></p>
+<hr />
+<h3><code>GET /api/blocking</code> 🔓</h3>
+<p>Pi-hole blocking effectiveness summary (alias for blocked_summary with time range support).</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>end_date</code>, <code>start_ts</code>, <code>end_ts</code></p>
+<p><strong>Returns:</strong> <code>{ blocked, allowed, total, pct_blocked }</code></p>
+<hr />
+<h3><code>GET /api/blocked_domains</code> 🔐</h3>
+<p>List all domains manually blocked via the dashboard.</p>
+<p><strong>Returns:</strong> <code>[{ domain, category, blocked_at }]</code></p>
+<hr />
+<h3><code>GET /api/manually_blocked</code> 🔐</h3>
+<p>Alias for <code>/api/blocked_domains</code> — used by MCP tools.</p>
+<p><strong>Returns:</strong> <code>[{ domain, category, blocked_at }]</code></p>
+<hr />
+<h3><code>POST /api/block_domain</code> 🔐</h3>
+<p>Block a domain via Pi-hole and record it in the local database.</p>
+<p><strong>Body (JSON):</strong> <code>{ "domain": "ads.example.com", "category": "ads_tracking" }</code></p>
+<p><strong>Returns:</strong> <code>{ status, domain, pihole_ok, message }</code></p>
+<hr />
+<h3><code>POST /api/unblock_domain</code> 🔐</h3>
+<p>Unblock a domain.</p>
+<p><strong>Body (JSON):</strong> <code>{ "domain": "ads.example.com" }</code></p>
+<p><strong>Returns:</strong> <code>{ status, domain, pihole_ok, message }</code></p>
+<hr />
+<h2>Search &amp; Query Log</h2>
+<h3><code>GET /api/search</code> 🔐</h3>
+<p>Search domains by keyword across a date.</p>
+<p><strong>Query params:</strong> <code>q</code>* (required), <code>date</code>, <code>limit</code> (1–200, default 50)</p>
+<p><strong>Returns:</strong> <code>{ query, date, results: [{ domain, category, client, client_ip, queries, blocked }] }</code></p>
+<hr />
+<h3><code>GET /api/query_log</code> 🔐</h3>
+<p>Raw DNS query log with optional filters.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>ip</code>, <code>category</code>, <code>domain</code>, <code>blocked</code> (<code>1</code> = blocked only), <code>limit</code> (1–500, default 100)</p>
+<p><strong>Returns:</strong> <code>[{ timestamp, domain, client, client_ip, category, status, query_type }]</code></p>
+<hr />
+<h3><code>GET /api/new_domains</code> 🔓</h3>
+<p>Domains seen for the first time today.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>end_date</code>, <code>start_ts</code>, <code>end_ts</code></p>
+<p><strong>Returns:</strong> <code>[{ domain, category, client, queries }]</code></p>
+<hr />
+<h3><code>GET /api/domains</code> 🔓</h3>
+<p>Top queried domains for a date.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>end_date</code>, <code>limit</code> (1–100, default 15), <code>client</code> (IP)</p>
+<p><strong>Returns:</strong> <code>[{ domain, category, queries, blocked }]</code></p>
+<hr />
+<h3><code>GET /api/hourly</code> 🔓</h3>
+<p>Hourly query counts — all clients combined, or one specific client.</p>
+<p><strong>Query params:</strong> <code>date</code>, <code>end_date</code>, <code>client</code> (IP), <code>start_ts</code>, <code>end_ts</code></p>
+<p><strong>Returns:</strong> <code>[{ hour: 0..23, queries, blocked }]</code></p>
+<hr />
+<h2>AI Summary (Gemini)</h2>
+<blockquote>
+<p>Requires <code>gemini.api_key</code> to be configured in <code>config.yaml</code>.</p>
+</blockquote>
+<h3><code>GET /api/ai_summary_stored</code> 🔐</h3>
+<p>Return the best stored AI summary without calling Gemini.</p>
+<p><strong>Query params:</strong> <code>period</code> (<code>daily</code> | <code>weekly</code> | <code>monthly</code>, default <code>daily</code>)</p>
+<p><strong>Returns:</strong> <code>{ summary, period, start, end, model, generated_at, run_type }</code> — or <code>204 No Content</code> if none stored.</p>
+<hr />
+<h3><code>GET /api/ai_eta</code> 🔐</h3>
+<p>Return estimated time for AI summary generation (for UI countdown).</p>
+<p><strong>Query params:</strong> <code>period</code>, <code>start_ts</code>, <code>end_ts</code></p>
+<p><strong>Returns:</strong> <code>{ num_devices, num_calls, delay_s, eta_seconds, rpm }</code></p>
+<hr />
+<h3><code>POST /api/ai_summary</code> 🔐</h3>
+<p>Generate an AI summary on-demand via Gemini, store it, and return it.</p>
+<p><strong>Body (JSON):</strong> <code>{ "period": "daily" }</code> — or <code>{ "start_ts": 1234567890, "end_ts": 1234567890 }</code></p>
+<p><strong>Returns:</strong>
+- <code>{ source: "live", summary, period, start, end, model, generated_at }</code> — fresh result
+- <code>{ source: "cached", summary, cache_notice, ... }</code> — quota hit, served from cache
+- <code>429</code> — quota hit and no cache available
+- <code>400</code> — API key not configured</p>
+<hr />
+<h3><code>POST /api/send_report</code> 🔓</h3>
+<p>Trigger an HTML email report in a background thread.</p>
+<p><strong>Body (JSON):</strong> <code>{ "period": "daily" }</code> — <code>daily</code> | <code>weekly</code> | <code>monthly</code></p>
+<p><strong>Returns:</strong> <code>{ status: "queued", message }</code> — report is emailed asynchronously.</p>
+<hr />
+<h2>Endpoint summary</h2>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Auth</th>
+<th>MCP tool</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/stats</code></td>
+<td>🔐</td>
+<td><code>pihole_stats</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/summary</code></td>
+<td>🔓</td>
+<td><code>pihole_summary</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/compare</code></td>
+<td>🔓</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/trend</code></td>
+<td>🔓</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/health</code></td>
+<td>🔐</td>
+<td><code>pihole_health</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/alerts</code></td>
+<td>🔓</td>
+<td><code>pihole_alerts</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/excessive_usage</code></td>
+<td>🔐</td>
+<td><code>pihole_excessive_usage</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/devices</code></td>
+<td>🔓</td>
+<td><code>pihole_devices</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/device_registry</code></td>
+<td>🔐</td>
+<td><code>pihole_device_registry</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/device_detail</code></td>
+<td>🔐</td>
+<td><code>pihole_device_detail</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/device_hourly</code></td>
+<td>🔐</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/device_hourly_categories</code></td>
+<td>🔐</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/device_domains</code></td>
+<td>🔐</td>
+<td><code>pihole_device_domains</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/device_flagged_category</code></td>
+<td>🔐</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/date_range</code></td>
+<td>🔐</td>
+<td><code>pihole_date_range</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/all_clients_hourly</code></td>
+<td>🔐</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/clients</code></td>
+<td>🔓</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/categories</code></td>
+<td>🔓</td>
+<td><code>pihole_categories</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/category_detail</code></td>
+<td>🔓</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/top_by_category</code></td>
+<td>🔐</td>
+<td><code>pihole_top_by_category</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/categorization_stats</code></td>
+<td>🔐</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/uncategorized_domains</code></td>
+<td>🔐</td>
+<td><code>pihole_uncategorized_domains</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/client_category_usage</code></td>
+<td>🔐</td>
+<td><code>pihole_client_category_usage</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/blocked_top</code></td>
+<td>🔐</td>
+<td><code>pihole_blocked_top</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/blocked_summary</code></td>
+<td>🔐</td>
+<td><code>pihole_blocked_summary</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/blocking</code></td>
+<td>🔓</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/blocked_domains</code></td>
+<td>🔐</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/manually_blocked</code></td>
+<td>🔐</td>
+<td><code>pihole_manually_blocked</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/block_domain</code></td>
+<td>🔐</td>
+<td><code>pihole_block_domain</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/unblock_domain</code></td>
+<td>🔐</td>
+<td><code>pihole_unblock_domain</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/search</code></td>
+<td>🔐</td>
+<td><code>pihole_search</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/query_log</code></td>
+<td>🔐</td>
+<td><code>pihole_query_log</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/new_domains</code></td>
+<td>🔓</td>
+<td><code>pihole_new_domains</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/domains</code></td>
+<td>🔓</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/hourly</code></td>
+<td>🔓</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/ai_summary_stored</code></td>
+<td>🔐</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/ai_eta</code></td>
+<td>🔐</td>
+<td>—</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/ai_summary</code></td>
+<td>🔐</td>
+<td>—</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/send_report</code></td>
+<td>🔓</td>
+<td><code>pihole_send_report</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+</body>
+</html>

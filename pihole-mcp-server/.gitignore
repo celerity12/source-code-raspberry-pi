@@ -1,0 +1,17 @@
+# Legacy monolithic config (replaced by per-layer configs below)
+config.yaml
+
+# Per-layer secret configs — copy from *.example.yaml and fill in values
+config/connectors/pihole.yaml
+config/connectors/telegram.yaml
+config/llm/gemini.yaml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Test cache
+.pytest_cache/

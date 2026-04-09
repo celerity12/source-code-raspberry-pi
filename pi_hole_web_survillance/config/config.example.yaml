@@ -1,0 +1,165 @@
+# ── Pi-hole Analytics — Configuration ────────────────────────────────────────
+# Copy this file to config.yaml and fill in your values.
+# config.yaml is gitignored — never commit it with real credentials.
+#
+# Sections:
+#   pihole      — Pi-hole connection (host + credentials)
+#   email       — SMTP settings for HTML email reports
+#   client_*    — Optional device name mappings (hostname / MAC / IP)
+#   categories  — Domain categorization rules (keywords + exact domains)
+#   gemini      — Gemini AI for on-demand network summaries
+#   reporting   — Data retention + report schedule
+#   dashboard   — Web UI port, password, URL
+
+# ── Pi-hole connection ────────────────────────────────────────────────────────
+# The analytics dashboard reads Pi-hole's query log via its API.
+# Pi-hole v5 uses api_token.  Pi-hole v6 uses password (or falls back to api_token).
+# Both fields are tried in order — leave the unused one as-is.
+
+pihole:
+  host: http://localhost         # Pi-hole address.  Use http://localhost if on the same Pi.
+                                 # Or http://192.168.1.x if Pi-hole is on another machine.
+  admin_path: /admin             # Always /admin for standard Pi-hole installs.
+  api_path: /admin/api.php       # v5 only — not used on v6 installs.
+
+  api_token: YOUR_PIHOLE_API_TOKEN
+  # Pi-hole v5 API token.
+  # Find it: Pi-hole admin → Settings → API / Web interface → Show API token.
+
+  password: YOUR_PIHOLE_PASSWORD
+  # Pi-hole v6 web interface password (same one you use to log into the admin UI).
+  # Leave blank if running Pi-hole v5.
+
+# ── Email reports ─────────────────────────────────────────────────────────────
+# Used by scripts/reporter.py to send HTML email reports (daily/weekly/monthly).
+# Reports are triggered by the scheduler or via POST /api/send_report.
+
+email:
+  smtp_server: smtp.gmail.com    # SMTP relay host.  Use smtp.gmail.com for Gmail.
+  smtp_port: 587                 # 587 = STARTTLS (recommended).  465 = SSL.
+  sender_email: you@gmail.com    # From address — must match the Gmail account below.
+  sender_password: YOUR_GMAIL_APP_PASSWORD
+  # Gmail App Password (NOT your account password).
+  # How to get one: Google Account → Security → 2-Step Verification → App Passwords.
+  # Required because Google blocks regular password auth for SMTP.
+
+  recipient_emails:
+  - you@example.com              # Add more lines for multiple recipients.
+
+  subject_prefix: '[Pi-hole Analytics]'
+  # Prepended to every report email subject line.
+  # Change to anything — e.g. '[Home Network]'
+
+# ── Device name mappings (optional) ──────────────────────────────────────────
+# Pi-hole stores queries by hostname or IP.  These mappings give devices friendly names.
+# They are applied during data collection — older data keeps the old name.
+#
+# Priority order: client_macs (MAC) → client_hostnames (hostname) → clients (IP)
+# MAC is most reliable; IP is least reliable (DHCP reassigns addresses).
+
+# Hostname → friendly name.
+# Find current hostnames:
+#   sqlite3 data/analytics.db "SELECT DISTINCT client_name FROM queries LIMIT 50;"
+client_hostnames:
+  "johns-iphone": "John's iPhone"
+  "sarahs-ipad": "Sarah's iPad"
+  "sarahs-macbook": "Sarah's MacBook"
+
+# MAC → friendly name.  Survives IP reassignment and hostname changes.
+# Find MACs in Pi-hole admin → Network or from your router's DHCP table.
+client_macs:
+  "AA:BB:CC:DD:EE:FF": "John's iPhone"
+
+# IP → friendly name.  Use only as a last resort — IPs change with DHCP.
+clients: {}
+
+# ── Category rules update URL (optional) ─────────────────────────────────────
+# If set, the dashboard fetches an updated rules YAML from this URL on startup.
+# Leave blank to use only the categories defined below.
+rules_update_url: ''
+
+# ── Domain categorization rules ───────────────────────────────────────────────
+# Domains are matched against these rules during data collection (scripts/fetcher.py).
+# Each category has two match lists:
+#   keywords — substring match against the domain (case-insensitive)
+#   domains  — exact domain match (e.g. "ads.example.com")
+#
+# Categories appear in the dashboard, alerts, and MCP tool responses.
+# Add keywords/domains to any category to improve classification accuracy.
+# Unmatched domains are stored as category 'other'.
+
+categories:
+  streaming:
+    keywords: [youtube, netflix, twitch, hulu, disney, spotify, tiktok]
+    domains: []
+
+  social_media:
+    keywords: [facebook, instagram, twitter, snapchat, reddit, linkedin, pinterest]
+    domains: []
+
+  gaming:
+    keywords: [steam, xbox, playstation, epicgames, roblox, minecraft]
+    domains: []
+
+  educational:
+    keywords: [khanacademy, coursera, udemy, duolingo, wikipedia]
+    domains: []
+
+  news:
+    keywords: [cnn, bbc, reuters, apnews, theguardian, nytimes]
+    domains: []
+
+  shopping:
+    keywords: [amazon, ebay, etsy, shopify, aliexpress, walmart]
+    domains: []
+
+  tech:
+    keywords: [github, stackoverflow, apple, microsoft, google, cloudflare]
+    domains: []
+
+  adult:
+    keywords: []                 # Add adult-content keywords here.  Triggers critical alert.
+    domains: []
+
+  ads_tracking:
+    keywords: [doubleclick, googletagmanager, analytics, adservice, pixel, tracking]
+    domains: []
+
+  smart_home:
+    keywords: [nest, ring, philips-hue, sonos, alexa, amazon-echo]
+    domains: []
+
+# ── Gemini AI (optional) ──────────────────────────────────────────────────────
+# Powers the AI summary feature on the dashboard (POST /api/ai_summary).
+# Free tier is available at https://aistudio.google.com/app/apikey.
+# Leave api_key as-is to disable AI summaries — the rest of the dashboard still works.
+
+gemini:
+  api_key: YOUR_GEMINI_API_KEY   # Get a free key at https://aistudio.google.com/app/apikey
+  model: gemini-2.0-flash        # gemini-2.0-flash (cheap) | gemini-2.5-flash (smarter, pricier)
+
+# ── Reporting & data retention ────────────────────────────────────────────────
+reporting:
+  data_retention_days: 90        # How many days of query data to keep in analytics.db.
+                                 # Older rows are pruned automatically.  90 = ~3 months.
+  top_domains_count: 20          # Number of top domains shown in email reports.
+  top_clients_count: 10          # Number of top clients shown in email reports.
+  report_time: "19:00"           # Scheduled daily report time (24h, local timezone).
+                                 # Set to "" to disable scheduled reports.
+
+# ── Dashboard web UI ──────────────────────────────────────────────────────────
+dashboard:
+  port: 8080                     # Port the Flask server listens on.
+                                 # Change if 8080 is already in use.
+  host: 0.0.0.0                  # 0.0.0.0 = accessible from all network interfaces.
+                                 # Use 127.0.0.1 to restrict to localhost only.
+  password: CHOOSE_A_DASHBOARD_PASSWORD
+  # Password for the dashboard web UI and REST API.
+  # Also used by the MCP connector (pihole-mcp-server/config/connectors/pihole.yaml).
+
+  url: http://YOUR_PI_IP:8080    # Public URL of this dashboard — e.g. http://192.168.68.102:8080
+                                 # Used in email reports as the "View online" link.
+
+  day_start_hour: 5              # Hour (0–23) at which a "day" begins for dashboard time windows.
+                                 # 5 = 5 AM start, so overnight traffic (midnight–5 AM) is
+                                 # counted in the previous day's stats.

@@ -1,0 +1,21 @@
+# ── Connector: Telegram Bot ───────────────────────────────────────────────────
+# Read by:  mcp/server.py  via  config/loader.py → load_connector('telegram')
+# Secret:   YES — this file is gitignored.  Never commit with real credentials.
+# Template: Copy to telegram.yaml and fill in your values.
+#
+# bot_token
+#   Your Telegram bot's HTTP API token.
+#   How to get one:
+#     1. Open Telegram and search for @BotFather
+#     2. Send /newbot and follow the prompts
+#     3. BotFather will send a token like:  1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ
+#
+# default_chat_id
+#   The Telegram chat ID that the agent sends messages to by default.
+#   How to find yours:
+#     1. Message @userinfobot on Telegram
+#     2. It will reply with your chat ID (a number like 123456789)
+#   Wrap in quotes to prevent YAML parsing the integer as a number.
+
+bot_token: YOUR_TELEGRAM_BOT_TOKEN
+default_chat_id: "YOUR_CHAT_ID"

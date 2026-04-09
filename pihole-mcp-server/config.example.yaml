@@ -1,0 +1,62 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Pi-hole MCP Server — Configuration
+# Copy this file, fill in your values, keep it out of git (it's gitignored).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── Connector: Pi-hole Analytics dashboard ────────────────────────────────────
+pihole_dashboard:
+  url: http://localhost:8080          # Pi-hole Analytics dashboard URL
+  password: YOUR_DASHBOARD_PASSWORD   # dashboard.password from pi_hole config.yaml
+
+
+# ── Connector: Telegram ───────────────────────────────────────────────────────
+telegram:
+  bot_token: YOUR_TELEGRAM_BOT_TOKEN  # From @BotFather on Telegram
+  default_chat_id: YOUR_CHAT_ID       # Message @userinfobot on Telegram to find yours
+
+
+# ── MCP server settings ───────────────────────────────────────────────────────
+mcp:
+  server_name: pihole-analytics       # Name shown to MCP clients (Claude Desktop etc.)
+  log_level: INFO                     # DEBUG | INFO | WARNING | ERROR
+
+
+# ── LLM: Gemini ───────────────────────────────────────────────────────────────
+gemini:
+  api_key: YOUR_GEMINI_API_KEY        # https://aistudio.google.com/app/apikey
+  model: gemini-2.0-flash             # gemini-2.0-flash | gemini-1.5-pro
+
+
+# ── LLM: system prompt ────────────────────────────────────────────────────────
+# Edit this to change how the agent behaves — no code changes needed.
+llm:
+  system_prompt: |
+    You are a home network security assistant powered by Pi-hole Analytics.
+
+    You have access to two sets of tools:
+
+    **Pi-hole tools** (prefix: pihole_) — query your home network:
+    - Check who is online, what sites they visit, which domains are blocked
+    - Find security alerts (adult content, VPN, crypto, excessive social media)
+    - Search for specific domains or view the query log
+    - Block or unblock domains
+
+    **Telegram tools** (prefix: telegram_) — communicate with the user:
+    - Send messages, alerts, network summaries, and health reports to Telegram
+
+    Guidelines:
+    - For any network question, start with pihole_stats or pihole_alerts for a quick overview.
+    - When you find security issues, always offer to send an alert to Telegram.
+    - Be concise and specific — include device names, counts, and domain names.
+    - When blocking a domain, confirm the action with the result.
+    - Use pihole_search when the user asks about a specific website or service.
+    - Always interpret results in plain English — not raw JSON.
+    - If the user asks you to "monitor" or "watch", use the health and alerts tools.
+
+  # Watch mode — how often to check and what prompt to use
+  watch_interval_minutes: 15
+  watch_prompt: |
+    Check Pi-hole for any security alerts or excessive usage right now.
+    If there are alerts, send them to Telegram.
+    If everything is fine, just say "All clear".

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DEPLOYMENT</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         line-height: 1.6; color: #1f2328; background: #f6f8fa;
+         padding: 24px; margin: 0; }
+  .content { max-width: 860px; margin: 0 auto; background: #fff;
+              border: 1px solid #d0d7de; border-radius: 12px; padding: 32px 40px; }
+  h1 { font-size: 28px; border-bottom: 2px solid #d0d7de; padding-bottom: 12px; margin-top: 0; }
+  h2 { font-size: 20px; border-bottom: 1px solid #d0d7de; padding-bottom: 6px; margin-top: 32px; }
+  h3 { font-size: 16px; margin-top: 24px; }
+  code { background: #f0f3f6; border: 1px solid #d0d7de; border-radius: 4px;
+          padding: 2px 5px; font-size: 13px; }
+  pre  { background: #0d1117; color: #e6edf3; border-radius: 8px; padding: 16px 20px;
+          overflow-x: auto; font-size: 13px; }
+  pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+  th, td { border: 1px solid #d0d7de; padding: 8px 12px; text-align: left; font-size: 14px; }
+  th { background: #f6f8fa; font-weight: 600; }
+  blockquote { border-left: 4px solid #0969da; margin: 0; padding: 8px 16px;
+                background: #f0f9ff; border-radius: 0 6px 6px 0; color: #0550ae; }
+  a { color: #0969da; }
+  hr { border: none; border-top: 1px solid #d0d7de; margin: 24px 0; }
+</style>
+</head>
+<body>
+<div class="content">
+<h1>Deployment Guide</h1>
+<p>Deploy Pi-hole Analytics from your Linux box to a Raspberry Pi running Ubuntu.</p>
+<blockquote>
+<p><strong>Shortcut:</strong> <code>bash deploy.sh</code> walks through every step interactively.</p>
+</blockquote>
+<hr />
+<h2>Prerequisites</h2>
+<p><strong>Linux box:</strong> <code>ssh</code>, <code>rsync</code></p>
+<p><strong>Raspberry Pi:</strong>
+- Ubuntu 22.04/24.04 (64-bit), Pi-hole v6 installed and running
+- SSH enabled, internet access, known IP address</p>
+<hr />
+<h2>Fresh Install</h2>
+<h3>1. Get your credentials</h3>
+<p><strong>Pi-hole admin password</strong>
+The password you use to log into <code>http://PI_IP/admin</code>. Add to <code>config/config.yaml</code> → <code>pihole.password</code>.</p>
+<p><strong>Pi-hole API token</strong> <em>(legacy v5 fallback)</em>
+Admin → Settings → API → Show API token. Add to <code>config/config.yaml</code> → <code>pihole.api_token</code>.</p>
+<p><strong>Gmail App Password</strong>
+1. myaccount.google.com → Security → 2-Step Verification must be ON
+2. Search "App passwords" → Create → name it "Pi-hole Analytics"
+3. Copy the 16-char password into <code>config/config.yaml</code> → <code>email.sender_password</code></p>
+<p><strong>Device names</strong> <em>(optional but recommended)</em>
+Find device IPs in your router's DHCP table or at <code>http://PI_IP/admin</code> → Network.
+Add to <code>config/config.yaml</code> under <code>clients</code>.</p>
+<blockquote>
+<p>Assign static DHCP leases in your router so IPs never change.</p>
+</blockquote>
+<hr />
+<h3>2. Edit config</h3>
+<pre><code class="language-bash">nano config/config.yaml
+</code></pre>
+<p>Minimum required fields:</p>
+<pre><code class="language-yaml">pihole:
+  host: http://localhost
+  api_token: PASTE_LEGACY_TOKEN_HERE
+  password: PASTE_ADMIN_PASSWORD_HERE   # Pi-hole v6 — same as web UI login
+
+email:
+  sender_email: you@gmail.com
+  sender_password: xxxx xxxx xxxx xxxx
+  recipient_emails:
+    - you@gmail.com
+
+clients:
+  &quot;192.168.68.100&quot;: &quot;Dad's iPhone&quot;
+</code></pre>
+<hr />
+<h3>3. Copy files to Pi</h3>
+<pre><code class="language-bash">rsync -az --exclude='.git/' --exclude='.claude/' --exclude='venv/' \
+    . USER@PI_IP:~/pihole-analytics/
+</code></pre>
+<hr />
+<h3>4. Run the installer</h3>
+<pre><code class="language-bash">ssh USER@PI_IP &quot;cd ~/pihole-analytics &amp;&amp; sudo bash install.sh&quot;
+</code></pre>
+<p>The installer:
+- Installs <code>python3-venv</code>, <code>sqlite3</code> via apt
+- Creates a Python venv and installs dependencies
+- Writes and enables all systemd services and timers
+- Downloads UT1 third-party domain DB (~50 MB)
+- Adds adult content blocklist to Pi-hole
+- Blocks DoH providers so browsers can't bypass Pi-hole
+- Runs the first data fetch</p>
+<hr />
+<h3>5. Lock down permissions</h3>
+<pre><code class="language-bash">ssh USER@PI_IP &quot;sudo chown -R USER:USER ~/pihole-analytics &amp;&amp; \
+    chmod 600 ~/pihole-analytics/config/config.yaml &amp;&amp; \
+    chmod 700 ~/pihole-analytics/data/ ~/pihole-analytics/logs/&quot;
+</code></pre>
+<hr />
+<h3>6. Verify</h3>
+<pre><code class="language-bash"># Dashboard is running
+ssh USER@PI_IP &quot;systemctl status pihole-analytics-dashboard&quot;
+
+# Timers are scheduled
+ssh USER@PI_IP &quot;systemctl list-timers pihole-analytics*&quot;
+
+# Data was fetched
+ssh USER@PI_IP &quot;sqlite3 ~/pihole-analytics/data/analytics.db 'SELECT COUNT(*) FROM queries;'&quot;
+
+# Open dashboard
+open http://PI_IP:8080
+</code></pre>
+<hr />
+<h3>7. Test email</h3>
+<pre><code class="language-bash">ssh USER@PI_IP &quot;sudo -u USER /home/USER/pihole-analytics/venv/bin/python3 \
+    /home/USER/pihole-analytics/scripts/reporter.py --period daily&quot;
+</code></pre>
+<p>Or click <strong>📧 Send Report</strong> in the dashboard.</p>
+<hr />
+<h3>8. Configure Pi-hole upstream DNS</h3>
+<ol>
+<li>Open <code>http://PI_IP/admin</code> → Settings → DNS</li>
+<li>Under <strong>Upstream DNS Servers</strong> check both IPv4 and IPv6 for <strong>Cloudflare (DNSSEC)</strong></li>
+<li>Save</li>
+</ol>
+<p>This ensures Pi-hole resolves non-blocked domains reliably.</p>
+<hr />
+<h3>9. Set your router to use Pi-hole as DNS</h3>
+<p>In your router's DHCP settings, set the DNS server to <code>PI_IP</code>. This ensures all devices on your network use Pi-hole automatically — including phones and smart TVs.</p>
+<hr />
+<h2>Adult Content Blocking</h2>
+<p>The installer handles this automatically. To set it up manually:</p>
+<pre><code class="language-bash"># Add adult content blocklist
+ssh USER@PI_IP &quot;sqlite3 /etc/pihole/gravity.db \
+    \&quot;INSERT OR IGNORE INTO adlist (address, enabled, comment) \
+    VALUES ('https://blocklistproject.github.io/Lists/porn.txt', 1, 'Adult content');\&quot; \
+    &amp;&amp; pihole -g&quot;
+
+# Block DoH providers (prevents browsers bypassing Pi-hole)
+ssh USER@PI_IP &quot;sudo pihole denylist add dns.google dns64.dns.google \
+    one.one.one.one 1dot1dot1dot1.cloudflare-dns.com \
+    mozilla.cloudflare-dns.com dns.quad9.net dns10.quad9.net&quot;
+</code></pre>
+<p><strong>Note on Chrome:</strong> Chrome has built-in DNS-over-HTTPS (DoH) that can bypass Pi-hole even after blocking DoH domains. Disable it per browser:
+- Chrome → Settings → Privacy and Security → Security → <strong>Use secure DNS</strong> → Off
+- Firefox → Settings → Privacy &amp; Security → DNS over HTTPS → <strong>Off</strong></p>
+<p>Safari and most mobile browsers use system DNS and are blocked automatically.</p>
+<hr />
+<h2>Upgrade (after code changes)</h2>
+<pre><code class="language-bash"># Push changed scripts and config
+rsync -az scripts/ USER@PI_IP:~/pihole-analytics/scripts/
+rsync -az config/  USER@PI_IP:~/pihole-analytics/config/
+
+# Fix ownership and restart
+ssh USER@PI_IP &quot;sudo chown -R USER:USER ~/pihole-analytics &amp;&amp; \
+    sudo systemctl restart pihole-analytics-dashboard&quot;
+</code></pre>
+<p>To upgrade the full install (new systemd units, new dependencies):</p>
+<pre><code class="language-bash">rsync -az --exclude='.git/' --exclude='.claude/' --exclude='venv/' \
+    . USER@PI_IP:~/pihole-analytics/
+ssh USER@PI_IP &quot;cd ~/pihole-analytics &amp;&amp; sudo bash install.sh &amp;&amp; \
+    sudo chown -R USER:USER ~/pihole-analytics&quot;
+</code></pre>
+<blockquote>
+<p><code>install.sh</code> is idempotent — safe to re-run on an existing install.</p>
+</blockquote>
+<hr />
+<h2>Ongoing Management</h2>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Command (run on Pi or via ssh)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Manual fetch</td>
+<td><code>sudo -u USER VENV/python3 scripts/fetcher.py</code></td>
+</tr>
+<tr>
+<td>Restart dashboard</td>
+<td><code>sudo systemctl restart pihole-analytics-dashboard</code></td>
+</tr>
+<tr>
+<td>View fetch log</td>
+<td><code>journalctl -u pihole-analytics-fetch -f</code></td>
+</tr>
+<tr>
+<td>Add a device</td>
+<td><code>nano ~/pihole-analytics/config/config.yaml</code> (no restart needed)</td>
+</tr>
+<tr>
+<td>Update config</td>
+<td>Edit <code>config.yaml</code> → restart dashboard</td>
+</tr>
+<tr>
+<td>Refresh UT1 DB</td>
+<td><code>sudo -u USER VENV/python3 scripts/downloader.py</code></td>
+</tr>
+<tr>
+<td>Block a domain</td>
+<td>Use 🚫 button in dashboard or <code>sudo pihole denylist add DOMAIN</code></td>
+</tr>
+<tr>
+<td>Unblock a domain</td>
+<td>Use ✅ Unblock in dashboard or <code>sudo pihole denylist remove DOMAIN</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>VENV</code> = <code>/home/USER/pihole-analytics/venv/bin</code></p>
+<hr />
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Permission denied</code> on log files</td>
+<td><code>sudo chown -R USER:USER ~/pihole-analytics/</code></td>
+</tr>
+<tr>
+<td>Dashboard 502 / not starting</td>
+<td><code>journalctl -u pihole-analytics-dashboard -n 50</code></td>
+</tr>
+<tr>
+<td>No data after install</td>
+<td>Run fetcher manually, check <code>logs/fetcher.log</code></td>
+</tr>
+<tr>
+<td>Email fails: "Username and Password not accepted"</td>
+<td>Wrong App Password or 2-Step Verification not enabled</td>
+</tr>
+<tr>
+<td>Email fails: connection timeout</td>
+<td>Firewall blocking port 587 outbound</td>
+</tr>
+<tr>
+<td><code>no such table: daily_summary</code></td>
+<td>Run fetcher once: it creates all tables</td>
+</tr>
+<tr>
+<td>UT1 download failed during install</td>
+<td>Re-run <code>downloader.py</code> manually — not critical</td>
+</tr>
+<tr>
+<td>Block button shows ❌ Failed</td>
+<td>Add <code>password:</code> to config.yaml (Pi-hole v6 admin password)</td>
+</tr>
+<tr>
+<td>Site not blocked despite being in deny list</td>
+<td>Browser DoH bypassing Pi-hole — disable DoH in browser settings</td>
+</tr>
+<tr>
+<td>Pi-hole DNS not applying to a device</td>
+<td>Check router DHCP DNS setting points to PI_IP</td>
+</tr>
+<tr>
+<td><code>dig DOMAIN +short</code> returns real IP not 0.0.0.0</td>
+<td>Device using a non-Pi-hole DNS (check <code>/etc/resolv.conf</code>)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Security Checklist</h2>
+<pre><code class="language-bash"># Lock config (contains API token + Gmail password)
+chmod 600 ~/pihole-analytics/config/config.yaml
+chown USER:USER ~/pihole-analytics/config/config.yaml
+
+# Restrict data and logs
+chmod 700 ~/pihole-analytics/data/ ~/pihole-analytics/logs/
+
+# Verify config.yaml is gitignored (on Linux box)
+grep config.yaml .gitignore
+
+# Pi-hole port 80 must NOT be port-forwarded to the internet
+# Only trusted users should have SSH access to the Pi
+</code></pre>
+<p>Revoke credentials if compromised:
+- <strong>Pi-hole password:</strong> Pi-hole admin → Settings → Change password → update config.yaml
+- <strong>Gmail App Password:</strong> myaccount.google.com → Security → App passwords → trash icon</p>
+</div>
+</body>
+</html>

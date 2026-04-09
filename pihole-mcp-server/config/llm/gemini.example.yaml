@@ -1,0 +1,20 @@
+# ── LLM: Gemini Credentials ───────────────────────────────────────────────────
+# Read by:  llm/gemini_agent.py  via  config/loader.py → load_llm()
+# Secret:   YES — this file is gitignored.  Never commit with real credentials.
+# Template: Copy to gemini.yaml and fill in your values.
+#
+# api_key
+#   Your Google Gemini API key.
+#   How to get one (free tier available):
+#     https://aistudio.google.com/app/apikey
+#   Key format: AIzaSy... (39 characters)
+#
+# model
+#   Which Gemini model the agent uses for the agentic loop.
+#   Recommended options:
+#     gemini-2.0-flash    — faster responses, lower latency, good for watch mode
+#     gemini-1.5-pro      — deeper reasoning, better for complex network analysis
+#     gemini-1.5-flash    — balanced speed/quality
+
+api_key: YOUR_GEMINI_API_KEY
+model: gemini-2.0-flash

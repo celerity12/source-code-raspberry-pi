@@ -1,0 +1,19 @@
+# ── Connector: Pi-hole Analytics Dashboard ────────────────────────────────────
+# Read by:  mcp/server.py  via  config/loader.py → load_connector('pihole')
+# Secret:   YES — this file is gitignored.  Never commit with real credentials.
+# Template: Copy to pihole.yaml and fill in your values.
+#
+# url
+#   Full base URL of the pi_hole_web_survillance dashboard (no trailing slash).
+#   Examples:
+#     http://localhost:8080          — MCP server running on the same machine as the dashboard
+#     http://192.168.1.10:8080       — Dashboard on a Raspberry Pi on your local network
+#     http://pi.local:8080           — Using mDNS hostname
+#
+# password
+#   The dashboard login password.
+#   Must match `dashboard.password` in the dashboard's config.yaml.
+#   The MCP connector posts this to POST /login on startup to obtain a session cookie.
+
+url: http://YOUR_PI_IP:8080
+password: YOUR_DASHBOARD_PASSWORD

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>README</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         line-height: 1.6; color: #1f2328; background: #f6f8fa;
+         padding: 24px; margin: 0; }
+  .content { max-width: 860px; margin: 0 auto; background: #fff;
+              border: 1px solid #d0d7de; border-radius: 12px; padding: 32px 40px; }
+  h1 { font-size: 28px; border-bottom: 2px solid #d0d7de; padding-bottom: 12px; margin-top: 0; }
+  h2 { font-size: 20px; border-bottom: 1px solid #d0d7de; padding-bottom: 6px; margin-top: 32px; }
+  h3 { font-size: 16px; margin-top: 24px; }
+  code { background: #f0f3f6; border: 1px solid #d0d7de; border-radius: 4px;
+          padding: 2px 5px; font-size: 13px; }
+  pre  { background: #0d1117; color: #e6edf3; border-radius: 8px; padding: 16px 20px;
+          overflow-x: auto; font-size: 13px; }
+  pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+  th, td { border: 1px solid #d0d7de; padding: 8px 12px; text-align: left; font-size: 14px; }
+  th { background: #f6f8fa; font-weight: 600; }
+  blockquote { border-left: 4px solid #0969da; margin: 0; padding: 8px 16px;
+                background: #f0f9ff; border-radius: 0 6px 6px 0; color: #0550ae; }
+  a { color: #0969da; }
+  hr { border: none; border-top: 1px solid #d0d7de; margin: 24px 0; }
+</style>
+</head>
+<body>
+<div class="content">
+<h1>pihole-mcp-server</h1>
+<p>Monitor and control your home network from <strong>Telegram</strong>. Ask questions, get alerts, and block domains — all from your phone.</p>
+<p>Connects to the <a href="https://github.com/simplyauditmanager/pi_hole_web_survillance">pi_hole_web_survillance</a> dashboard over HTTP.</p>
+<hr />
+<h2>What you can do from Telegram</h2>
+<h3>Slash commands</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/status</code></td>
+<td>Network overview — queries, blocked %, active devices</td>
+</tr>
+<tr>
+<td><code>/alerts</code></td>
+<td>Security alerts today (adult content, VPN, crypto)</td>
+</tr>
+<tr>
+<td><code>/health</code></td>
+<td>System health — disk, RAM, CPU, temperature</td>
+</tr>
+<tr>
+<td><code>/devices</code></td>
+<td>List all active devices today</td>
+</tr>
+<tr>
+<td><code>/block domain.com</code></td>
+<td>Block a domain via Pi-hole</td>
+</tr>
+<tr>
+<td><code>/unblock domain.com</code></td>
+<td>Unblock a domain</td>
+</tr>
+<tr>
+<td><code>/report</code></td>
+<td>Trigger a daily email report</td>
+</tr>
+<tr>
+<td><code>/help</code></td>
+<td>Show all commands</td>
+</tr>
+</tbody>
+</table>
+<h3>Natural language</h3>
+<p>You can also ask anything in plain English:</p>
+<blockquote>
+<p>"Who was online last night?"
+"Did anyone visit anything suspicious this week?"
+"What was the kids' tablet doing yesterday?"
+"Show me all gaming sites visited today."
+"Block YouTube for now."</p>
+</blockquote>
+<hr />
+<h2>How it works</h2>
+<pre><code>Your Telegram message
+        ↓
+  gemini_agent.py  (polls Telegram every 3s for new messages)
+        ↓
+  Gemini AI  (decides which data to fetch)
+        ↓
+  mcp/server.py  (29 tools — Pi-hole data + Telegram sending)
+        ↓
+  Pi-hole Analytics dashboard  (your network data)
+        ↓
+  Reply sent back to your Telegram
+</code></pre>
+<hr />
+<h2>Setup</h2>
+<h3>Prerequisites</h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Where to get it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pi-hole Analytics dashboard running</td>
+<td>Deploy <a href="https://github.com/simplyauditmanager/pi_hole_web_survillance">pi_hole_web_survillance</a> first</td>
+</tr>
+<tr>
+<td>Gemini API key</td>
+<td><a href="https://aistudio.google.com/app/apikey">aistudio.google.com/app/apikey</a> — free</td>
+</tr>
+<tr>
+<td>Telegram bot token</td>
+<td>Message <a href="https://t.me/BotFather">@BotFather</a> → /newbot</td>
+</tr>
+<tr>
+<td>Your Telegram chat ID</td>
+<td>Message <a href="https://t.me/userinfobot">@userinfobot</a></td>
+</tr>
+</tbody>
+</table>
+<h3>Install</h3>
+<pre><code class="language-bash">git clone https://github.com/simplyauditmanager/pihole-mcp-server
+cd pihole-mcp-server
+pip3 install -r requirements.txt
+</code></pre>
+<h3>Configure</h3>
+<pre><code class="language-bash">cp config/connectors/pihole.example.yaml    config/connectors/pihole.yaml
+cp config/connectors/telegram.example.yaml  config/connectors/telegram.yaml
+cp config/llm/gemini.example.yaml           config/llm/gemini.yaml
+</code></pre>
+<p>Fill in the three files:</p>
+<p><strong>config/connectors/pihole.yaml</strong></p>
+<pre><code class="language-yaml">url: http://192.168.1.10:8080   # your Pi's IP
+password: your_dashboard_password
+</code></pre>
+<p><strong>config/connectors/telegram.yaml</strong></p>
+<pre><code class="language-yaml">bot_token: 1234567890:ABCdef...   # from @BotFather
+default_chat_id: &quot;123456789&quot;      # from @userinfobot
+</code></pre>
+<p><strong>config/llm/gemini.yaml</strong></p>
+<pre><code class="language-yaml">api_key: AIzaSy...
+model: gemini-2.0-flash
+</code></pre>
+<h3>Verify</h3>
+<pre><code class="language-bash">python3 llm/gemini_agent.py --prompt &quot;Is my network healthy?&quot;
+</code></pre>
+<hr />
+<h2>Running</h2>
+<h3>Telegram bot + watch mode (recommended)</h3>
+<p>Bot listens for your commands <strong>and</strong> sends automatic alerts every 6 hours:</p>
+<pre><code class="language-bash">python3 llm/gemini_agent.py --telegram --watch
+</code></pre>
+<p>Once running, open Telegram and send <code>/help</code> to your bot.</p>
+<h3>Telegram bot only</h3>
+<p>Responds to commands and questions, no automatic alerts:</p>
+<pre><code class="language-bash">python3 llm/gemini_agent.py --telegram
+</code></pre>
+<h3>Watch mode only</h3>
+<p>Periodic checks on a schedule, no command listening:</p>
+<pre><code class="language-bash">python3 llm/gemini_agent.py --watch
+python3 llm/gemini_agent.py --watch --interval 120   # every 2 hours
+</code></pre>
+<p>Watch schedule (configured in <code>config/llm/prompts.yaml</code>):
+- Checks every 6 hours by default
+- Skips 4 AM–10 AM quiet window automatically
+- Sends Telegram alert only if issues found</p>
+<hr />
+<h2>Run as a permanent systemd service</h2>
+<p>Keeps the bot running across reboots. Replace <code>pi</code> and <code>/home/pi</code> with your username.</p>
+<pre><code class="language-bash">sudo nano /etc/systemd/system/pihole-mcp-watch.service
+</code></pre>
+<pre><code class="language-ini">[Unit]
+Description=Pi-hole Telegram Bot + Watch Agent
+After=network.target pihole-analytics-dashboard.service
+
+[Service]
+ExecStart=/home/pi/pihole-mcp-server/.venv/bin/python3 /home/pi/pihole-mcp-server/llm/gemini_agent.py --telegram --watch
+WorkingDirectory=/home/pi/pihole-mcp-server
+Restart=on-failure
+RestartSec=30
+User=pi
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+<pre><code class="language-bash">sudo systemctl daemon-reload
+sudo systemctl enable --now pihole-mcp-watch
+sudo journalctl -u pihole-mcp-watch -f    # view live logs
+</code></pre>
+<hr />
+<h2>Config files</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Secret</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>config/connectors/pihole.yaml</code></td>
+<td>Yes — gitignored</td>
+<td>Dashboard URL + password</td>
+</tr>
+<tr>
+<td><code>config/connectors/telegram.yaml</code></td>
+<td>Yes — gitignored</td>
+<td>Bot token + chat ID</td>
+</tr>
+<tr>
+<td><code>config/llm/gemini.yaml</code></td>
+<td>Yes — gitignored</td>
+<td>Gemini API key + model</td>
+</tr>
+<tr>
+<td><code>config/llm/prompts.yaml</code></td>
+<td>No</td>
+<td>Watch schedule + agent behaviour</td>
+</tr>
+<tr>
+<td><code>config/mcp/server.yaml</code></td>
+<td>No</td>
+<td>Server name + log level</td>
+</tr>
+</tbody>
+</table>
+<h3>Watch schedule (config/llm/prompts.yaml)</h3>
+<pre><code class="language-yaml">watch_interval_minutes: 360   # check every 6 hours
+watch_skip_start_hour: 4      # quiet window start (4 AM)
+watch_skip_end_hour: 10       # quiet window end (10 AM)
+</code></pre>
+<hr />
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bot not responding</td>
+<td>Check <code>bot_token</code> in <code>telegram.yaml</code>; verify bot exists in Telegram</td>
+</tr>
+<tr>
+<td><code>ConnectionRefusedError</code></td>
+<td>Dashboard not running — start <code>pihole-analytics-dashboard</code> first</td>
+</tr>
+<tr>
+<td><code>401 Unauthorized</code></td>
+<td>Wrong <code>password</code> in <code>pihole.yaml</code></td>
+</tr>
+<tr>
+<td>Gemini quota error</td>
+<td>Wait 1 min; increase <code>watch_interval_minutes</code> in <code>prompts.yaml</code></td>
+</tr>
+<tr>
+<td>Bot sends "⏳ Checking..." but no reply</td>
+<td>Run <code>journalctl -u pihole-mcp-watch -f</code> and check for errors</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Testing</h2>
+<pre><code class="language-bash">python3 -m pytest tests/test_all.py -v
+</code></pre>
+<p>All tests run offline — no live credentials required.</p>
+</div>
+</body>
+</html>

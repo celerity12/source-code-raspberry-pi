@@ -1,0 +1,49 @@
+# ── LLM: Prompts & Behaviour ──────────────────────────────────────────────────
+# Read by:  llm/gemini_agent.py  via  config/loader.py → load_prompts()
+# Secret:   NO — safe to commit.  No credentials here, only text.
+#
+# Edit this file to tune agent behaviour without touching any code.
+#
+# ── watch_interval_minutes ────────────────────────────────────────────────────
+# How often watch mode checks the network when explicitly started with --watch.
+# Watch mode is OFF by default — it only runs when you launch:
+#   python3 llm/gemini_agent.py --watch [--interval N]
+# Unit: minutes.  Keep high to avoid unnecessary Gemini API calls.
+# Free Gemini tier: ~10 RPM — each watch tick is 1 call.
+
+watch_interval_minutes: 360   # every 6 hours
+
+# ── watch quiet window ────────────────────────────────────────────────────────
+# Skip checks between skip_start_hour and skip_end_hour (24h local time).
+# During this window, watch mode sleeps and resumes at skip_end_hour.
+
+watch_skip_start_hour: 4    # 4 AM — start of quiet window
+watch_skip_end_hour:   10   # 10 AM — end of quiet window
+
+# ── system_prompt ─────────────────────────────────────────────────────────────
+# The Gemini system prompt — sets the agent's persona and tool usage rules.
+# Applied once at the start of every chat session.
+# Pipe (|) preserves newlines in YAML.
+#
+# Guidelines for editing:
+#   - Keep tool prefix rules (pihole_ / telegram_) so the agent knows which
+#     connector to use for each task.
+#   - Be specific about when to call Telegram vs just answering in text.
+#   - "Always interpret results in plain English" prevents raw JSON responses.
+
+system_prompt: |
+  Home network assistant using Pi-hole Analytics.
+  Tools: pihole_* (query network), telegram_* (send messages).
+  Rules:
+  - Only act when user asks. Never proactively check or alert.
+  - Use pihole_stats first for any network question.
+  - Reply in plain English, not JSON. Be concise — names, counts, domains.
+  - Confirm block/unblock actions with result.
+
+# ── watch_prompt ──────────────────────────────────────────────────────────────
+# The prompt sent to Gemini on every watch-mode tick.
+# Keep it short — it runs repeatedly on a timer.
+# The agent will use pihole_alerts and telegram_ tools based on the system_prompt rules above.
+
+watch_prompt: |
+  Check pihole_alerts. If alerts found, send to Telegram. Otherwise say "All clear".
