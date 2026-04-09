@@ -1,0 +1,33 @@
+# ── up_synthetics — Health Monitor Config ─────────────────────────────────────
+# Copy this to config.yaml and fill in your values.
+# config.yaml is gitignored — never commit with real credentials.
+
+# ── Pi connection ──────────────────────────────────────────────────────────────
+pi_host: "localhost"                        # Use localhost if running ON the Pi
+                                            # Use 192.168.68.102 if running remotely
+dashboard_url: "http://localhost:8080"      # Analytics dashboard URL
+pihole_url: "http://localhost/admin"        # Pi-hole admin URL
+nas_mount: "/mnt/nas"                       # NAS mount point
+
+# ── Telegram notifications ─────────────────────────────────────────────────────
+telegram:
+  bot_token: YOUR_TELEGRAM_BOT_TOKEN        # Same bot used by pihole-mcp-server
+  chat_id: "YOUR_CHAT_ID"                   # Your Telegram chat ID
+
+# ── Email notifications ────────────────────────────────────────────────────────
+email:
+  smtp_server: smtp.gmail.com
+  smtp_port: 587
+  sender_email: you@gmail.com               # Same Gmail used by pi_hole_web_survillance
+  sender_password: YOUR_GMAIL_APP_PASSWORD  # Gmail App Password
+  recipient_emails:
+    - you@example.com                       # Add more recipients if needed
+
+# ── Thresholds (optional — these are the defaults) ────────────────────────────
+thresholds:
+  disk_warn_pct: 80      # Warn when disk usage exceeds this %
+  disk_crit_pct: 90      # Fail when disk usage exceeds this %
+  ram_warn_pct: 80
+  ram_crit_pct: 90
+  cpu_temp_warn_c: 70    # Warn at 70°C
+  cpu_temp_crit_c: 80    # Fail at 80°C

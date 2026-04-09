@@ -1,0 +1,44 @@
+# ── Credentials & secrets ─────────────────────────────────────────────────────
+**/config.yaml
+**/config.yml
+**/config.sh
+**/*.key
+**/*.pem
+**/*.env
+.env
+
+# ── NAS setup secrets ─────────────────────────────────────────────────────────
+nas-setup/config.sh
+
+# ── Uptime synthetics secrets ──────────────────────────────────────────────────
+uptime-synthetics/config.yaml
+
+# ── Pi-hole MCP server secrets ────────────────────────────────────────────────
+pihole-mcp-server/config/connectors/pihole.yaml
+pihole-mcp-server/config/connectors/telegram.yaml
+pihole-mcp-server/config/llm/gemini.yaml
+pihole-mcp-server/config.yaml
+
+# ── Analytics dashboard secrets ───────────────────────────────────────────────
+pi_hole_web_survillance/config/config.yaml
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# ── Logs & data ───────────────────────────────────────────────────────────────
+logs/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+data/
+reports/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
